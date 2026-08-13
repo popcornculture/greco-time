@@ -52,17 +52,43 @@ has no backend yet. Part B provides it.
 
 **B2.** In that Sheet: **Extensions → Apps Script**.
 
-> Do this **from inside the Sheet**, not from script.google.com. It binds the script to the
-> Sheet, which is what makes the `Greco Time` menu work and what lets a single ownership
-> transfer hand Paul both at once.
+> This *will* open `script.google.com` — that is the Apps Script editor and it is the right
+> place. What matters is how you got there. Opening it via **Extensions → Apps Script from
+> inside the Sheet** creates a script *bound* to that Sheet. Starting instead from
+> script.google.com and clicking **New project** creates a standalone script, which cannot
+> add the `Greco Time` menu and would have to be transferred to Paul separately.
+>
+> Quick check you did it right: the editor's **Overview** page shows the Sheet as the
+> container, and back in the Sheet a `Greco Time` menu appears once you reload (step B7).
 
-**B3.** Name the project **Greco Time**. Then recreate the four files from `~/projects/greco-time/script/`:
+**B3.** Name the project **Greco Time**, then create the four files.
 
-- Delete the contents of the default `Code.gs` and paste in **`Code.gs`**.
-- **+ → Script** three times, named `Config`, `Sheet`, `Mail` (Apps Script adds the `.gs`),
-  pasting in **`Config.gs`**, **`Sheet.gs`**, **`Mail.gs`**.
+Apps Script has **no import and no drag-and-drop** — code has to be pasted as text. The
+`.gs` files on your Mac also have no default app, so double-clicking them does nothing.
+Easiest route is to copy each one straight to the clipboard:
 
-File order does not matter. Save (⌘S).
+```sh
+pbcopy < ~/projects/greco-time/script/Code.gs      # then paste, then repeat per file
+pbcopy < ~/projects/greco-time/script/Config.gs
+pbcopy < ~/projects/greco-time/script/Sheet.gs
+pbcopy < ~/projects/greco-time/script/Mail.gs
+```
+
+Or, if you'd rather not use the terminal, open the repo on GitHub and use the **copy raw
+file** button on each:
+<https://github.com/popcornculture/greco-time/tree/main/script>
+
+In the editor:
+
+1. `Code.gs` already exists holding a stub `myFunction()`. Click it, select all (⌘A),
+   paste **Code.gs** over it.
+2. For each of the other three: **+** next to *Files* → **Script** → name it `Config`,
+   `Sheet`, `Mail` — **no `.gs` extension**, Apps Script adds that — then select all and
+   paste the matching file.
+3. Save (⌘S).
+
+You should end with exactly four files: `Code.gs`, `Config.gs`, `Sheet.gs`, `Mail.gs`.
+Order in the list doesn't matter; Apps Script loads them all.
 
 **B4.** Replace the manifest. `appsscript.json` already exists but is **hidden by
 default** — you are editing it, not adding it:
