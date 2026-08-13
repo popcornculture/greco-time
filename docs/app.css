@@ -367,3 +367,12 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
   .pending { background: #3a2e14; border-color: #6b5424; color: #ffd88a; }
   .today-list .t-queued { background: #3a2e14; color: #ffd88a; }
 }
+
+/* Build stamp on the setup screen — makes "is this phone on the current version?"
+   a question you can answer by looking, rather than by guessing about caches. */
+.build {
+  margin-top: 22px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
