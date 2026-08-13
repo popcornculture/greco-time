@@ -170,8 +170,16 @@ the digest.
 - Log time on the phone. That is the whole job.
 - New client? Tick **new client** and type the name; it joins the list for next time.
 - Push to MyCase: **Rebuild MyCase export** → download CSV → import → **Mark exported**.
-- The `Clients` tab can be seeded in bulk any time by pasting a MyCase contact export into
-  column A.
+### Seeding the case list (do this early)
+
+Column A of the `Clients` tab must hold **MyCase case names, spelled exactly as MyCase
+spells them** — that is what the import matches on. Case naming at the firm is
+inconsistent (`People vs Aaron`, `Richards, Aaron`, `abel maya` all exist), which is fine;
+the autocomplete copes with the mixture. What is *not* fine is retyping them from memory,
+because a near-miss fails the import.
+
+So: export or copy your case list out of MyCase and paste it into column A in one go.
+Anything added later via the **new client** checkbox appends itself automatically.
 
 ## If something breaks
 

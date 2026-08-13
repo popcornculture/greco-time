@@ -134,6 +134,49 @@ eq(displays(searchClients(clients(), 'artesia h')), ['Artesia Holdings LLC'], 'c
 eq(searchClients(clients(), 'zz'), [], 'no match yields nothing');
 eq(displays(searchClients(clients(), 'CLAUDE')), ['Claude Artificial'], 'matching is case-insensitive');
 
+/* ───────────────── real MyCase case-name shapes (Paul Greco Law) ─────────────────
+ * Case naming in MyCase is inconsistent — confirmed 2026-08-13, all three of these
+ * coexist. The matcher must cope with the mixture, and whatever is displayed, the
+ * canonical string is what gets filed. */
+group('real MyCase case-name shapes');
+
+function realCases() {
+  return [{ name: 'People vs Aaron' }, { name: 'Richards, Aaron' }, { name: 'abel maya' }];
+}
+function filedAs(hits) { return hits.map(function (h) { return h.client.name; }); }
+
+/* Caption form. "vs" without a full stop must still be recognised. */
+eq(parseName('People vs Aaron').isEntity, true, '"vs" without a period is still a caption');
+eq(displays(searchClients(realCases(), 'peo')), ['People vs Aaron'], 'caption found by its first word');
+eq(displays(searchClients(realCases(), 'aaron')).indexOf('People vs Aaron') !== -1, true,
+   'caption also found by the name inside it');
+
+/* Surname-first form. */
+eq(displays(searchClients(realCases(), 'ric')), ['Richards, Aaron'], 'surname-first form found by surname');
+eq(filedAs(searchClients(realCases(), 'aar')).indexOf('Richards, Aaron') !== -1, true,
+   'surname-first form also found by given name');
+
+/* Lowercase, given-first form. Kept verbatim — the stored string has to survive
+ * untouched or the MyCase import stops matching. */
+eq(displays(searchClients(realCases(), 'ab')), ['abel maya'], 'lowercase name found by first word');
+eq(displays(searchClients(realCases(), 'may')), ['maya, abel'], 'lowercase inverts on surname match');
+eq(filedAs(searchClients(realCases(), 'may')), ['abel maya'], 'but files under the stored lowercase form');
+
+/* The critical invariant across all shapes: display may differ from what is stored,
+ * but what is stored is always MyCase's exact string. */
+['peo', 'aar', 'ric', 'ab', 'may'].forEach(function (q) {
+  var hits = searchClients(realCases(), q);
+  var allCanonical = hits.every(function (h) {
+    return ['People vs Aaron', 'Richards, Aaron', 'abel maya'].indexOf(h.client.name) !== -1;
+  });
+  eq(allCanonical, true, '"' + q + '" only ever files a verbatim MyCase case name');
+});
+
+/* Typing the exact case name, in any of the three shapes, resolves. */
+eq(resolveExact(realCases(), 'People vs Aaron').name, 'People vs Aaron', 'caption resolves exactly');
+eq(resolveExact(realCases(), 'ABEL MAYA').name, 'abel maya', 'casing does not matter when resolving');
+eq(resolveExact(realCases(), 'Aaron Richards').name, 'Richards, Aaron', 'un-inverted input resolves to stored form');
+
 /* ─────────────────────────────── resolveExact ─────────────────────────────── */
 group('resolveExact');
 

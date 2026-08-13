@@ -76,11 +76,41 @@ The endpoint URL and PIN are entered on the device at setup. `docs/dev-config.js
 `MYCASE_FIELDS` in `Config.gs` is the single source of truth for the export's columns
 and their order.
 
-> **Still outstanding:** the `header` strings in `MYCASE_FIELDS` are a **guess**. MyCase's
-> importer says "do not edit the column headers", so get the real template from
-> **Billing → Time Entries → Import Time Entries → Download CSV template** and correct
-> them. Only the `header` strings need changing — the code addresses columns by `key`, so
-> renaming or reordering headers cannot break the digest or the export.
+**Verified against the real template, 2026-08-13:**
+
+```
+Case Name,User,Activity,Note,Date,Rate,Rate Type,Hours,Nonbillable
+Example Court Case 1,John Doe,Filing Fees,Description about the time entry.,5/6/21,30,Hourly,6,FALSE
+```
+
+Two traps in that row:
+
+- **`Nonbillable` is inverted.** Billable time is `FALSE`. Writing `TRUE` imports
+  everything as non-billable and Paul bills nothing. A test asserts this literally.
+- **`Case Name` matches the MyCase *case*, not the contact.** The `Clients` tab therefore
+  holds case names (column A is `CaseName`), and must be seeded from a real MyCase case
+  list rather than typed from memory — the strings have to match verbatim.
+
+`Rate` and `Rate Type` are configurable via Script Properties, blank / `Hourly` by
+default so MyCase applies the rate already on the case. Dates export as `M/d/yy` to match
+the template; Sheets writes the *displayed* value into a CSV, so the number format is the
+wire format.
+
+### Case naming is inconsistent (confirmed 2026-08-13)
+
+All three of these shapes coexist in Paul's MyCase, so the matcher handles the mixture:
+
+| Stored in MyCase | Type `aar` / `may` / `peo` and it shows | Files as |
+|---|---|---|
+| `People vs Aaron` | `People vs Aaron` | verbatim |
+| `Richards, Aaron` | `Aaron Richards` | `Richards, Aaron` |
+| `abel maya` | `maya, abel` | `abel maya` |
+
+Captions are detected by a **lowercase** ` v. ` / ` vs ` separator and never inverted; an
+uppercase `V.` is treated as a middle initial (`John V. Smith` → `Smith, John V.`).
+Lowercase names are kept lowercase — the stored string must survive untouched. The display
+form may be one MyCase does not literally contain (`Aaron Richards`); the green
+"✓ Filing under …" hint always shows the string that will actually be written.
 
 Workflow: `Greco Time → Rebuild MyCase export` → `File → Download → CSV` → upload in
 MyCase → `Greco Time → Mark exported rows as done`. Test rows and already-exported rows
