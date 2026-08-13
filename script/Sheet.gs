@@ -170,12 +170,12 @@ function execUrl() {
 
 /**
  * Workspace accounts report their web app as
- * https://script.google.com/a/macros/<domain>/s/<id>/exec. Both that and the plain
- * /macros/s/<id>/exec form work anonymously, but the plain one is shorter and has one
- * less moving part, so links are built from it.
+ * https://script.google.com/a/<domain>/macros/s/<id>/exec — note the domain comes before
+ * "macros". Both that and the plain /macros/s/<id>/exec form work anonymously, but the
+ * plain one is shorter and domain-independent, so links are built from it.
  */
 function normaliseExec(u) {
-  var m = /^https:\/\/script\.google\.com\/(?:a\/macros\/[^\/]+|macros)\/s\/([^\/]+)\/exec$/.exec(u || '');
+  var m = /^https:\/\/script\.google\.com\/(?:a\/[^\/]+\/)?macros\/s\/([^\/]+)\/exec$/.exec(u || '');
   return m ? 'https://script.google.com/macros/s/' + m[1] + '/exec' : u;
 }
 
