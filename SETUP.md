@@ -64,9 +64,23 @@ has no backend yet. Part B provides it.
 
 File order does not matter. Save (⌘S).
 
-**B4.** Set the timezone and manifest. Click the **gear (Project Settings)** → tick
-**"Show `appsscript.json` manifest file in editor"**. Go back to the editor, open
-`appsscript.json`, and replace it with the contents of `script/appsscript.json`. Save.
+**B4.** Replace the manifest. `appsscript.json` already exists but is **hidden by
+default** — you are editing it, not adding it:
+
+1. Click the **gear (Project Settings)** in the left sidebar.
+2. Tick **"Show `appsscript.json` manifest file in editor"**.
+3. Back in the **Editor**, `appsscript.json` now appears in the file list. Open it, select
+   all, and replace with the contents of `script/appsscript.json`. Save.
+
+Do not skip this. It carries three things that break in non-obvious ways if wrong:
+
+- **`timeZone: America/Los_Angeles`** — without it the project may sit in UTC, which files
+  late-afternoon entries under tomorrow's date and fires the 6pm digest at the wrong hour.
+- **`oauthScopes`** — determines what the one-time authorization prompt grants. Notably it
+  includes `script.container.ui`, which the `Greco Time` menu's dialogs need; miss it and
+  **Set PIN…** fails. It deliberately does *not* request `script.external_request`, because
+  the script makes no outbound calls and shouldn't ask for permission it doesn't use.
+- **`runtimeVersion: V8`** — the code assumes the modern runtime.
 
 **B5.** Create the tabs. In the toolbar function dropdown pick **`setupSheet`** → **Run**.
 
