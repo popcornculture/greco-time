@@ -168,8 +168,19 @@ function execUrl() {
   try { return ScriptApp.getService().getUrl() || ''; } catch (err) { return ''; }
 }
 
+/**
+ * Workspace accounts report their web app as
+ * https://script.google.com/a/macros/<domain>/s/<id>/exec. Both that and the plain
+ * /macros/s/<id>/exec form work anonymously, but the plain one is shorter and has one
+ * less moving part, so links are built from it.
+ */
+function normaliseExec(u) {
+  var m = /^https:\/\/script\.google\.com\/(?:a\/macros\/[^\/]+|macros)\/s\/([^\/]+)\/exec$/.exec(u || '');
+  return m ? 'https://script.google.com/macros/s/' + m[1] + '/exec' : u;
+}
+
 function setupLink() {
-  var exec = execUrl();
+  var exec = normaliseExec(execUrl());
   var pwa = prop('PWA_URL');
   if (!exec) throw new Error('No web app URL. Deploy it (Deploy → New deployment → Web app), then paste the /exec URL into the EXEC_URL script property.');
   if (!pwa) throw new Error('Set PWA_URL in Script Properties to where the app is hosted.');

@@ -513,8 +513,14 @@ async function onConnect() {
   if (!pin) return setupError('Enter the PIN.');
 
   // Caught here rather than at the network layer, where it surfaces as "Load failed".
-  if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(endpoint)) {
-    return setupError('That address does not look right. It should be:\n' +
+  //
+  // Two legitimate shapes. A Google Workspace account reports its web app under a
+  // domain-scoped path, and both are anonymously reachable (verified against the live
+  // deployment), so both must be accepted:
+  //   https://script.google.com/macros/s/<id>/exec
+  //   https://script.google.com/a/macros/<domain>/s/<id>/exec
+  if (!/^https:\/\/script\.google\.com\/(?:a\/macros\/[^/]+|macros)\/s\/[^/]+\/exec$/.test(endpoint)) {
+    return setupError('That address does not look right. It should end in /exec, like:\n' +
       'https://script.google.com/macros/s/…/exec\n\n' +
       'Got: ' + endpoint);
   }
