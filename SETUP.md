@@ -82,18 +82,19 @@ once per row:
 
 | Property | Value |
 |---|---|
-| `TIMEKEEPERS` | `[{"name":"Paul Greco","isTest":false},{"name":"Staff","isTest":false},{"name":"Alex (testing)","isTest":true}]` |
+| `TIMEKEEPERS` | `[{"name":"Paul Greco","isTest":false},{"name":"Paralegal Staff","isTest":false},{"name":"Alex (testing)","isTest":true}]` |
 | `NOTIFY_ENTRY` | `Paul@grecolawgroup.com,Staff@grecolawgroup.com` |
 | `NOTIFY_DIGEST` | `Paul@grecolawgroup.com` |
 | `PWA_URL` | `https://popcornculture.github.io/greco-time/` |
 
-Two things to get right:
+The `TIMEKEEPERS` names above are MyCase's exact user names (`Paul Greco`,
+`Paralegal Staff`, confirmed 2026-08-13) — the import matches on that literal string, so
+do not tidy them up.
 
-- **The names in `TIMEKEEPERS` must match MyCase's spelling exactly** — the import matches
-  on that string. Check how MyCase writes Paul and the paralegal before pasting this in, and
-  correct `"Staff"` to her actual MyCase user name.
-- Leave `SHEET_ID` unset (the bound script finds its own Sheet) and `SEND_PER_ENTRY` unset
-  (defaults to on, which is right for Workspace).
+Leave these unset unless you have a reason: `SHEET_ID` (the bound script finds its own
+Sheet), `SEND_PER_ENTRY` (defaults on, correct for Workspace), `DEFAULT_RATE` (blank makes
+MyCase use the rate already on the case, which is what you want), `RATE_TYPE` (defaults to
+`Hourly`), `DEFAULT_ACTIVITY` (blank).
 
 **B7.** Set the PIN. Reload the **Sheet** tab — a **Greco Time** menu appears in the menu
 bar. Choose **Greco Time → Set PIN…**, type a PIN of at least 4 characters, OK.
@@ -152,11 +153,12 @@ the digest.
    export** → open the `MyCaseExport` tab → **File → Download → Comma-separated values** →
    in MyCase, **Billing → Time Entries → Import Time Entries** and upload it.
 
-> The column headers in `MYCASE_FIELDS` (`script/Config.gs`) are currently a **guess**.
-> Download MyCase's own template from that same import screen and compare. If the headers
-> differ, tell me and I will correct them — only the header strings change, nothing else.
+> The headers now match MyCase's real template exactly (verified 2026-08-13):
+> `Case Name,User,Activity,Note,Date,Rate,Rate Type,Hours,Nonbillable`
 >
-> Do this first with a **single** entry, and delete it in MyCase afterwards.
+> Still do this first with a **single** entry and delete it in MyCase afterwards. Three
+> things only a real import can settle: whether a blank `Rate` is accepted, whether a blank
+> `Activity` is accepted, and whether your **Case Name** values match MyCase's cases.
 
 5. After a real import, run **Greco Time → Mark exported rows as done** so those rows never
    go out twice. Skipping this double-bills clients on the next export.

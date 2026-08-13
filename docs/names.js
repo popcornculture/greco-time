@@ -25,7 +25,18 @@ function isSuffix(token) {
   return NAME_SUFFIXES.indexOf(String(token).toLowerCase()) !== -1;
 }
 
+/* Case captions — "People v. Ramirez", "Smith vs Jones". MyCase matches time entries on
+ * the Case Name, and cases are frequently named this way, so these must not be inverted
+ * into nonsense like "Ramirez, People v.".
+ *
+ * The check is deliberately case-SENSITIVE: a lowercase "v." is the legal separator,
+ * whereas an uppercase "V." is someone's middle initial ("John V. Smith"). */
+function looksLikeCaseCaption(raw) {
+  return /\s(v\.?|vs\.?)\s/.test(String(raw));
+}
+
 function looksLikeEntity(raw) {
+  if (looksLikeCaseCaption(raw)) return true;
   var tokens = String(raw).toLowerCase().replace(/,/g, ' ').split(/\s+/);
   for (var i = 0; i < tokens.length; i++) {
     if (ENTITY_MARKERS.indexOf(tokens[i]) !== -1) return true;

@@ -64,6 +64,19 @@ eq(parseName('The Benson Family Trust').surnameFirst, 'The Benson Family Trust',
 eq(parseName('County of Santa Barbara').isEntity, true, 'public bodies are entities');
 eq(parseName('Maria Ramirez').isEntity, false, 'a person is not an entity');
 
+/* Case captions. MyCase matches on Case Name, and cases are often named this way, so
+ * "People v. Ramirez" must not become "Ramirez, People v.". */
+eq(parseName('People v. Ramirez').isEntity, true, '"v." marks a case caption');
+eq(parseName('People v. Ramirez').surnameFirst, 'People v. Ramirez', 'captions are not inverted');
+eq(parseName('Smith vs Jones').isEntity, true, '"vs" also marks a caption');
+eq(parseName('Ramirez v. State of California').givenFirst, 'Ramirez v. State of California', 'caption left intact');
+/* But an uppercase middle initial is not a caption. */
+eq(parseName('John V. Smith').isEntity, false, 'an uppercase V. is a middle initial, not a caption');
+eq(parseName('John V. Smith').surnameFirst, 'Smith, John V.', 'middle-initial name still inverts normally');
+/* And a caption is still findable by the name inside it. */
+eq(displays(searchClients([{ name: 'People v. Ramirez' }], 'ram')), ['People v. Ramirez'],
+   'a caption is findable by the surname inside it, shown as stored');
+
 p = parseName('Cher');
 eq([p.first, p.last, p.surnameFirst], ['', 'Cher', 'Cher'], 'single-token name is left alone');
 

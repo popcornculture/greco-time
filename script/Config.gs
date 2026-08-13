@@ -16,6 +16,10 @@
  *   NOTIFY_ENTRY    Comma-separated recipients for per-save confirmations.
  *   NOTIFY_DIGEST   Comma-separated recipients for the end-of-day digest.
  *   SEND_PER_ENTRY  "false" turns off per-save email (see the quota note below).
+ *   DEFAULT_RATE      Optional. Blank (the default) makes MyCase use the rate already
+ *                     set on the case/user, which is usually what you want.
+ *   RATE_TYPE         Defaults to "Hourly". The template's other value is "Flat Fee".
+ *   DEFAULT_ACTIVITY  Optional MyCase activity-picklist value; blank by default.
  *   PWA_URL         Where the web app is hosted, e.g.
  *                   https://<user>.github.io/greco-time/ — used only to print
  *                   the setup link from the Sheet menu.
@@ -35,26 +39,38 @@ var TABS = {
 };
 
 /**
- * ─── UNVERIFIED: replace with the real MyCase template headers ────────────────
+ * ─── Verified against MyCase's own template, 2026-08-13 ───────────────────────
  *
- * MyCase's importer says "do not edit the column headers", so these must match its
- * downloaded template character for character. Get the real file from
- * Billing → Time Entries → Import Time Entries → Download CSV template, then edit the
- * `header` strings — and only those — below. Reorder the array if the template's column
- * order differs; the export follows this array.
+ * Taken from the real `time_entry_import.csv` downloaded from
+ * Billing → Time Entries → Import Time Entries → Download CSV template:
  *
- * The rest of the code addresses columns by `key`, never by header text or position, so
- * renaming or reordering headers here cannot break the digest or the export.
+ *   Case Name,User,Activity,Note,Date,Rate,Rate Type,Hours,Nonbillable
+ *   Example Court Case 1,John Doe,Filing Fees,Description about the time entry.,5/6/21,30,Hourly,6,FALSE
+ *
+ * MyCase says "do not edit the column headers", so these strings and this order are
+ * fixed. The rest of the code addresses columns by `key`, never by header text or
+ * position.
+ *
+ * Two of these are traps:
+ *
+ *   Nonbillable — INVERTED. Billable time is FALSE, not TRUE. Writing TRUE here would
+ *                 import every entry as non-billable and Paul would bill nothing.
+ *   Case Name   — MyCase matches on the *case* name, not the client/contact name. The
+ *                 Clients tab therefore has to hold case names as MyCase spells them.
  */
 var MYCASE_FIELDS = [
-  { key: 'date',        header: 'Date',        value: function (e) { return toSheetDate(e.date); } },
-  { key: 'client',      header: 'Case',        value: function (e) { return e.client; } },
+  { key: 'client',      header: 'Case Name',   value: function (e) { return e.client; } },
   { key: 'timekeeper',  header: 'User',        value: function (e) { return e.timekeeper; } },
-  { key: 'activity',    header: 'Activity',    value: function (e) { return ''; } },
-  { key: 'description', header: 'Description', value: function (e) { return e.description || ''; } },
+  // Activity is a MyCase picklist we do not collect; blank lets MyCase apply its default.
+  { key: 'activity',    header: 'Activity',    value: function (e) { return prop('DEFAULT_ACTIVITY', ''); } },
+  { key: 'description', header: 'Note',        value: function (e) { return e.description || ''; } },
+  { key: 'date',        header: 'Date',        value: function (e) { return toSheetDate(e.date); } },
+  // Blank by default so MyCase falls back to the rate already on the case/user.
+  { key: 'rate',        header: 'Rate',        value: function (e) { return prop('DEFAULT_RATE', ''); } },
+  { key: 'rateType',    header: 'Rate Type',   value: function (e) { return prop('RATE_TYPE', 'Hourly'); } },
   { key: 'hours',       header: 'Hours',       value: function (e) { return e.hours; } },
-  { key: 'rate',        header: 'Rate',        value: function (e) { return ''; } },
-  { key: 'billable',    header: 'Billable',    value: function (e) { return 'Yes'; } },
+  // FALSE = billable. See the warning above.
+  { key: 'nonbillable', header: 'Nonbillable', value: function (e) { return 'FALSE'; } },
 ];
 
 /** Bookkeeping columns, kept to the right of the MyCase block so the export can slice
@@ -77,8 +93,15 @@ function col(key) {
   throw new Error('Unknown column key: ' + key);
 }
 
-var CLIENT_HEADERS = ['ClientName', 'DefaultMatterType', 'AddedAt', 'AddedBy'];
+/* Column A must hold the MyCase **Case Name**, because that is what the import matches
+ * on. The app labels it "Client" because that is how the office talks about it. */
+var CLIENT_HEADERS = ['CaseName', 'DefaultMatterType', 'AddedAt', 'AddedBy'];
 var DEVICE_HEADERS = ['DeviceId', 'Timekeeper', 'IsTest', 'FirstSeen', 'LastSeen'];
+
+/* MyCase's own template writes dates as 5/6/21, so the export matches that exactly —
+ * Sheets writes the *displayed* value into a CSV, which makes this the wire format.
+ * A guessed MM/dd/yyyy might well be accepted too, but this form is known-good. */
+var MYCASE_DATE_FORMAT = 'M/d/yy';
 
 var MAX_HOURS_PER_ENTRY = 24;
 var MAX_FAILED_PINS = 10;          // per device, per hour

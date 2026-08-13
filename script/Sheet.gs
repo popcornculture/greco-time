@@ -20,7 +20,7 @@ function formatEntrySheet(sheet) {
   var rows = sheet.getLastRow() - 1;
   if (rows < 1) return;
   // MyCase's importer expects US dates; hours to one decimal so 1.5 never renders as 2.
-  sheet.getRange(2, col('date') + 1, rows, 1).setNumberFormat('MM/dd/yyyy');
+  sheet.getRange(2, col('date') + 1, rows, 1).setNumberFormat(MYCASE_DATE_FORMAT);
   sheet.getRange(2, col('hours') + 1, rows, 1).setNumberFormat('0.0');
 }
 
@@ -73,7 +73,7 @@ function rebuildExport() {
   if (rows.length) {
     out.getRange(2, 1, rows.length, headers.length).setValues(rows);
     // Same logical columns, but positions within the MyCase-only block.
-    out.getRange(2, col('date') + 1, rows.length, 1).setNumberFormat('MM/dd/yyyy');
+    out.getRange(2, col('date') + 1, rows.length, 1).setNumberFormat(MYCASE_DATE_FORMAT);
     out.getRange(2, col('hours') + 1, rows.length, 1).setNumberFormat('0.0');
     batch.getRange(2, 1, uuids.length, 1).setValues(uuids);
   }
