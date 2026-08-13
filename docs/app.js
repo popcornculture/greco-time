@@ -140,13 +140,29 @@ async function api(action, payload, override) {
   } catch (err) {
     let host = endpoint;
     try { host = new URL(endpoint).host; } catch (_) { /* not even a valid URL */ }
-    const tail = endpoint.slice(-5);
+
+    // Safari reports both "the request never left" and "it came back but CORS blocked
+    // reading it" as an identical bare "Load failed". A no-cors retry tells them apart:
+    // it is sent and resolves opaquely whenever the network path works, regardless of
+    // CORS headers. Whether it resolves is the whole diagnosis.
+    let reached = false;
+    try {
+      await fetch(endpoint, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'verify', pin: '', deviceId: cfg.deviceId, payload: {} }),
+      });
+      reached = true;
+    } catch (_) { /* genuinely unreachable */ }
+
     throw new Error(
-      `Could not reach ${host}. ` +
-      (tail === '/exec'
-        ? 'Check the phone has signal or Wi-Fi.'
-        : `The address must end in /exec — this one ends in "${tail}".`) +
-      ` [${err.message || err}]`);
+      (reached
+        ? `Reached ${host}, but the browser refused to read the reply (CORS). ` +
+          'The deployment is probably not set to "Anyone" access — redeploy it, or check ' +
+          'EXEC_URL points at the deployment you published.'
+        : `Could not reach ${host} at all — the request never got through. ` +
+          'Check for a content blocker, a VPN, or iCloud Private Relay on this phone.') +
+      ` [online:${navigator.onLine} err:${err.message || err}]`);
   }
   if (!res.ok) throw new Error(`Server returned ${res.status}`);
 
