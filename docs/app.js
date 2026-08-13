@@ -179,29 +179,24 @@ async function loadClients() {
 
 /* ══════════════════════════════ suggestions UI ══════════════════════════════ */
 
-/* Builds the row with textContent + a <mark> node rather than innerHTML: client
- * names come out of a spreadsheet, and a name containing markup should render as
- * text, not as HTML. */
-function suggestionRow(hit, query) {
+/* Uses textContent rather than innerHTML: case names come out of a spreadsheet, and a
+ * name containing markup must render as text, not as HTML. */
+function suggestionRow(hit) {
   const li = document.createElement('li');
   li.setAttribute('role', 'option');
   li.setAttribute('aria-selected', 'false');
 
-  const text = hit.display;
-  const idx = text.toLowerCase().indexOf(query.trim().toLowerCase());
-  if (idx === -1) {
-    li.textContent = text;
-  } else {
-    const end = idx + query.trim().length;
-    li.append(document.createTextNode(text.slice(0, idx)));
-    const m = document.createElement('mark');
-    m.textContent = text.slice(idx, end);
-    li.append(m, document.createTextNode(text.slice(end)));
-  }
+  // Wrapped in a span so the CSS line-clamp applies: real case names reach 150 chars.
+  const label = document.createElement('span');
+  label.textContent = hit.display;
+
+  // The full name is the accessible name and the tooltip, even when visually clamped.
+  li.title = hit.display;
+  li.append(label);
   return li;
 }
 
-function renderSuggestions(hits, query) {
+function renderSuggestions(hits) {
   const ul = $('suggestions');
   ul.textContent = '';
   state.activeIdx = -1;
@@ -209,7 +204,7 @@ function renderSuggestions(hits, query) {
   if (!hits.length) { ul.hidden = true; return; }
 
   hits.forEach((hit, i) => {
-    const li = suggestionRow(hit, query);
+    const li = suggestionRow(hit);
     // pointerdown, not click: the input's blur would otherwise close the list first.
     li.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -573,8 +568,7 @@ function wireEvents() {
   client.addEventListener('input', () => {
     state.picked = null;
     if ($('new-client').checked) { $('suggestions').hidden = true; showClientState(); return; }
-    const q = client.value;
-    renderSuggestions(searchClients(state.clients, q), q);
+    renderSuggestions(searchClients(state.clients, client.value));
     showClientState();
   });
   client.addEventListener('keydown', (e) => {

@@ -116,8 +116,47 @@ Workflow: `Greco Time → Rebuild MyCase export` → `File → Download → CSV`
 MyCase → `Greco Time → Mark exported rows as done`. Test rows and already-exported rows
 are excluded from the export.
 
-`MatterType` (Criminal/Civil/Family) currently lives in the internal block only — it may
+`MatterType` (Criminal/Civil/Family/**Conservatorship**) lives in the internal block only — it may
 or may not map to a MyCase column once the real template is known.
+
+## The form
+
+```
+Matter                                    Date  [ 8/13/2026 ]
+┌──────────────────┬──────────────────┐
+│     Criminal     │      Civil       │
+├──────────────────┼──────────────────┤
+│      Family      │ Conservatorship  │
+└──────────────────┴──────────────────┘
+Client/Case                              ☐ new client
+[                                                        ]
+Time                          1.5 hrs · 90 min · 15×6min
+[                      1.5                               ]
+[0.1] [0.2] [0.3] [0.5] [1.0]
+Description — optional
+[                                                        ]
+[                    Save entry                          ]
+Today                                            2.4 hrs
+```
+
+Decisions behind it, so they don't get "tidied" away:
+
+- **Conservatorship is a fourth button** — 71 of 260 open cases, the largest single
+  practice area, and it fits none of the other three. Four buttons across a row shared with
+  the date field would give each ~52px on a 390px phone, nowhere near enough for a
+  15-character label, so they sit in a **2×2 grid** and Date moved up beside the label to
+  keep it at the top of the form as specified. Verified to fit down to 320px.
+- **The field is labelled "Client/Case"**, because the value must be MyCase's Case Name,
+  which is sometimes a person and sometimes a caption.
+- **No match highlighting** in the suggestion list — removed at Alex's request.
+- **Suggestions are clamped to two lines** with the full name as the tooltip. 93 of 260 real
+  case names exceed 40 characters and the longest is 150, because MyCase names embed filing
+  titles; unclamped, three suggestions would push Save off screen.
+- **Over 8 hours on one entry needs a second tap** ("Tap again to confirm 15.0 hrs"), since
+  typing `15` for `1.5` is the likeliest data-entry error. Deliberately not a `confirm()`
+  dialog.
+- **Today's list with a running total** sits under the form, so a bad entry is obvious
+  immediately rather than at 6pm when the digest lands.
 
 ## Autocomplete rules
 

@@ -178,8 +178,35 @@ inconsistent (`People vs Aaron`, `Richards, Aaron`, `abel maya` all exist), whic
 the autocomplete copes with the mixture. What is *not* fine is retyping them from memory,
 because a near-miss fails the import.
 
-So: export or copy your case list out of MyCase and paste it into column A in one go.
-Anything added later via the **new client** checkbox appends itself automatically.
+So export the case list and let the helper script format it:
+
+```sh
+# Settings -> Import/Export -> export Cases  (downloads a folder containing cases.csv)
+python3 tools/cases-to-clients.py ~/Downloads/mycase-cases-*/cases.csv
+```
+
+It writes `clients-tab.tsv` next to the input: two tab-separated columns, sorted, closed
+cases dropped, matter button pre-filled from each case's Practice Area. Open the `Clients`
+tab, click **A2**, paste.
+
+Keep that file out of the repo — it is the firm's live case list and the repo is public.
+
+Re-run it monthly or so. Cases added on a phone via the **new client** checkbox append
+themselves, so this is only for bulk refreshes.
+
+**Practice Area → matter button** (decided against the real 260 open cases):
+
+| Button | Practice areas | Cases |
+|---|---|---|
+| Criminal | Criminal Defense, SLO Defender, MH Slo Defender, PD, DUI/DWI, DV | 87 |
+| Conservatorship | Conservatorship SLO | 71 |
+| Civil | Civil, Bankruptcy, Intellectual Property, Immigration | 50 |
+| Family | Family, Divorce/Separation, CWS | 39 |
+| *(none — tap it)* | cases with no practice area set in MyCase | 13 |
+
+The mapping lives in `PRACTICE_AREA_TO_MATTER` in that script. Add new practice areas
+there as MyCase gains them; anything unmapped simply doesn't pre-fill a button, which is
+the safe failure.
 
 ## If something breaks
 

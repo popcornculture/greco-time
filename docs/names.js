@@ -35,13 +35,30 @@ function looksLikeCaseCaption(raw) {
   return /\s(v\.?|vs\.?)\s/.test(String(raw));
 }
 
+/* Real MyCase case names frequently tack a filing title onto a person's name:
+ *   "Teasley, Anthony PETITION FOR APPOINTMENT OF PROBATE CONSERVATOR"
+ * Inverting that yields "Anthony PETITION FOR … Teasley", which is nonsense. An
+ * all-caps run of 4+ letters is a reliable marker of a filing title rather than a name. */
+function hasFilingTitle(raw) {
+  return /\b[A-Z]{4,}\b/.test(String(raw));
+}
+
 function looksLikeEntity(raw) {
   if (looksLikeCaseCaption(raw)) return true;
+  if (hasFilingTitle(raw)) return true;
   var tokens = String(raw).toLowerCase().replace(/,/g, ' ').split(/\s+/);
   for (var i = 0; i < tokens.length; i++) {
     if (ENTITY_MARKERS.indexOf(tokens[i]) !== -1) return true;
   }
   return false;
+}
+
+/* Only flip a name around when it genuinely looks like a person: one surname, at most
+ * two given names. Anything longer is shown exactly as MyCase stores it. Median case
+ * name at the firm is 33 characters and the longest is 150, so this matters. */
+function isInvertible(first, last) {
+  if (!first || !last) return false;
+  return last.split(' ').length === 1 && first.split(' ').length <= 2;
 }
 
 /**
@@ -89,14 +106,16 @@ function parseName(canonical) {
   }
 
   var tail = suffix ? ' ' + suffix : '';
+  var flip = isInvertible(first, last);
   return {
     canonical: raw,
     first: first,
     last: last,
     suffix: suffix,
     isEntity: false,
-    surnameFirst: first ? last + ', ' + first + tail : raw,
-    givenFirst: first ? first + ' ' + last + tail : raw,
+    invertible: flip,
+    surnameFirst: flip ? last + ', ' + first + tail : raw,
+    givenFirst: flip ? first + ' ' + last + tail : raw,
     tokens: raw.replace(/,/g, ' ').split(' ').filter(function (t) { return t; }),
   };
 }

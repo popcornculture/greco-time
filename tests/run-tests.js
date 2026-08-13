@@ -134,6 +134,25 @@ eq(displays(searchClients(clients(), 'artesia h')), ['Artesia Holdings LLC'], 'c
 eq(searchClients(clients(), 'zz'), [], 'no match yields nothing');
 eq(displays(searchClients(clients(), 'CLAUDE')), ['Claude Artificial'], 'matching is case-insensitive');
 
+/* ─────────── filing titles embedded in case names (real MyCase data) ───────────
+ * 93 of the firm's 260 case names exceed 40 characters, and the longest is 150, because
+ * MyCase names frequently carry the filing title. Inverting those produces nonsense. */
+group('filing titles');
+
+var petition = 'Teasley, Anthony PETITION FOR APPOINTMENT OF PROBATE CONSERVATOR';
+eq(parseName(petition).isEntity, true, 'an ALL-CAPS run marks a filing title');
+eq(parseName(petition).surnameFirst, petition, 'filing-title names are shown verbatim');
+eq(parseName(petition).givenFirst, petition, 'and are never re-ordered');
+eq(displays(searchClients([{ name: petition }], 'teas')), [petition], 'still findable by surname');
+eq(displays(searchClients([{ name: petition }], 'anthony')), [petition], 'and by given name');
+
+/* The inversion guard on its own: only simple person names flip. */
+eq(parseName('Ramirez, Maria').invertible, true, 'one surname + one given name flips');
+eq(parseName('Ramirez, Maria Elena').invertible, true, 'two given names still flips');
+eq(parseName('Ramirez, Maria Elena Sofia Consuelo').invertible, false, 'four given names does not flip');
+eq(parseName('Ramirez, Maria Elena Sofia Consuelo').surnameFirst,
+   'Ramirez, Maria Elena Sofia Consuelo', 'long names shown as stored');
+
 /* ───────────────── real MyCase case-name shapes (Paul Greco Law) ─────────────────
  * Case naming in MyCase is inconsistent — confirmed 2026-08-13, all three of these
  * coexist. The matcher must cope with the mixture, and whatever is displayed, the

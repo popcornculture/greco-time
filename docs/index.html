@@ -70,26 +70,31 @@
 
   <form id="entry-form" novalidate>
 
-    <!-- Row 1: matter type + date -->
-    <div class="row">
-      <div class="field grow">
-        <span class="label">Matter</span>
-        <div class="segmented" role="radiogroup" aria-label="Matter type">
-          <button type="button" class="seg" role="radio" data-matter="Criminal" aria-checked="false">Criminal</button>
-          <button type="button" class="seg" role="radio" data-matter="Civil"    aria-checked="false">Civil</button>
-          <button type="button" class="seg" role="radio" data-matter="Family"   aria-checked="false">Family</button>
-        </div>
+    <!-- Row 1: matter type label + date, then the buttons full-width beneath.
+         "Conservatorship" cannot fit in a quarter of a shared row on a 320px phone, so
+         the four options sit in a 2x2 grid spanning the full width instead. -->
+    <div class="field">
+      <div class="label-row">
+        <span class="label" id="matter-label">Matter</span>
+        <label class="date-inline">
+          <span class="label">Date</span>
+          <input id="date" type="date">
+        </label>
       </div>
-      <label class="field date-field">
-        <span class="label">Date</span>
-        <input id="date" type="date">
-      </label>
+      <div class="segmented" role="radiogroup" aria-labelledby="matter-label">
+        <button type="button" class="seg" role="radio" data-matter="Criminal"        aria-checked="false">Criminal</button>
+        <button type="button" class="seg" role="radio" data-matter="Civil"           aria-checked="false">Civil</button>
+        <button type="button" class="seg" role="radio" data-matter="Family"          aria-checked="false">Family</button>
+        <button type="button" class="seg" role="radio" data-matter="Conservatorship" aria-checked="false">Conservatorship</button>
+      </div>
     </div>
 
     <!-- Row 2: client, with autocomplete -->
     <div class="field">
       <div class="label-row">
-        <span class="label">Client</span>
+        <!-- "Client/Case" because the value must be MyCase's Case Name, which is
+             sometimes the client and sometimes a caption like "People vs Aaron". -->
+        <span class="label">Client/Case</span>
         <label class="newclient">
           <input id="new-client" type="checkbox">
           <span>new client</span>
