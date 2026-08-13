@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Greco Time</title>
+
+<!-- viewport-fit=cover + safe-area padding in CSS keeps the form clear of the notch and
+     home bar. No maximum-scale: every input is >=16px, which is what actually stops
+     Safari zooming on focus, so pinch-zoom stays available. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<!-- Chrome-less fullscreen launch from the home screen. Both spellings are needed:
+     Apple honours the apple- prefixed one, everyone else the unprefixed one. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Greco Time">
+<meta name="theme-color" content="#00376A">
+
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- ───────────────────────── Setup (first launch only) ───────────────────────── -->
+<!-- The endpoint URL and PIN are entered here, never committed: this repo is public
+     because GitHub Pages on a free account cannot serve from a private one. -->
+<section id="setup" class="screen" hidden>
+  <h1 class="setup-title">Greco Time</h1>
+  <p class="setup-sub">One-time setup for this phone.</p>
+
+  <label class="field">
+    <span class="label">Server address</span>
+    <input id="setup-endpoint" type="url" inputmode="url" autocapitalize="off"
+           autocorrect="off" spellcheck="false" placeholder="https://script.google.com/…/exec">
+    <span class="hint">Filled in automatically if you opened the setup link.</span>
+  </label>
+
+  <label class="field">
+    <span class="label">PIN</span>
+    <input id="setup-pin" type="password" inputmode="numeric" autocomplete="off"
+           placeholder="••••••">
+  </label>
+
+  <label class="field">
+    <span class="label">Who is using this phone?</span>
+    <select id="setup-timekeeper">
+      <option value="">Connect first…</option>
+    </select>
+  </label>
+
+  <p id="setup-error" class="error" hidden></p>
+
+  <button id="setup-connect" class="primary">Connect</button>
+  <button id="setup-save" class="primary" hidden>Start using Greco Time</button>
+</section>
+
+<!-- ───────────────────────────── Main entry form ───────────────────────────── -->
+<section id="app" class="screen" hidden>
+
+  <header class="topbar">
+    <div class="who">
+      <strong id="who-name">—</strong>
+      <span id="who-test" class="test-tag" hidden>TEST</span>
+    </div>
+    <button id="pending" class="pending" hidden aria-live="polite"></button>
+  </header>
+
+  <form id="entry-form" novalidate>
+
+    <!-- Row 1: matter type + date -->
+    <div class="row">
+      <div class="field grow">
+        <span class="label">Matter</span>
+        <div class="segmented" role="radiogroup" aria-label="Matter type">
+          <button type="button" class="seg" role="radio" data-matter="Criminal" aria-checked="false">Criminal</button>
+          <button type="button" class="seg" role="radio" data-matter="Civil"    aria-checked="false">Civil</button>
+          <button type="button" class="seg" role="radio" data-matter="Family"   aria-checked="false">Family</button>
+        </div>
+      </div>
+      <label class="field date-field">
+        <span class="label">Date</span>
+        <input id="date" type="date">
+      </label>
+    </div>
+
+    <!-- Row 2: client, with autocomplete -->
+    <div class="field">
+      <div class="label-row">
+        <span class="label">Client</span>
+        <label class="newclient">
+          <input id="new-client" type="checkbox">
+          <span>new client</span>
+        </label>
+      </div>
+      <div class="combo">
+        <input id="client" type="text" autocomplete="off" autocorrect="off"
+               autocapitalize="words" spellcheck="false" enterkeyhint="done"
+               placeholder="Start typing a name…">
+        <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
+      </div>
+      <span id="client-state" class="hint" hidden></span>
+    </div>
+
+    <!-- Row 3: time in decimal hours. 0.1 = 6 minutes, so 1.5 = 90 minutes. -->
+    <div class="field">
+      <div class="label-row">
+        <span class="label">Time</span>
+        <span id="time-readout" class="readout">—</span>
+      </div>
+      <input id="hours" type="text" inputmode="decimal" autocomplete="off"
+             placeholder="0.0" class="hours-input">
+      <div class="chips" aria-label="Common amounts">
+        <button type="button" class="chip" data-hours="0.1">0.1</button>
+        <button type="button" class="chip" data-hours="0.2">0.2</button>
+        <button type="button" class="chip" data-hours="0.3">0.3</button>
+        <button type="button" class="chip" data-hours="0.5">0.5</button>
+        <button type="button" class="chip" data-hours="1.0">1.0</button>
+      </div>
+    </div>
+
+    <!-- Optional narrative. Never blocks a save. -->
+    <label class="field">
+      <span class="label">Description <span class="muted">— optional</span></span>
+      <input id="description" type="text" autocomplete="off" enterkeyhint="done"
+             placeholder="Phone call w/ DA…">
+    </label>
+
+    <p id="form-error" class="error" hidden></p>
+
+    <button id="save" type="submit" class="primary big">Save entry</button>
+  </form>
+
+  <!-- Today's entries, so a fat-fingered 15 that should have been 1.5 is obvious
+       immediately rather than at 6pm when the digest lands. -->
+  <section class="today">
+    <div class="today-head">
+      <h2>Today</h2>
+      <strong id="today-total">0.0 hrs</strong>
+    </div>
+    <ul id="today-list" class="today-list"></ul>
+    <p id="today-empty" class="muted small">Nothing logged yet today.</p>
+  </section>
+
+  <footer class="footer">
+    <button id="reset-device" class="linkish" type="button">Reset this device</button>
+  </footer>
+</section>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="names.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Local dev config — holds the Apps Script endpoint URL and test PIN.
+# NEVER commit: this repo is public so GitHub Pages can serve docs/.
+docs/dev-config.json
+dev-config.json
+
+# clasp credentials + project id
+script/.clasp.json
+.clasprc.json
+
+.DS_Store
