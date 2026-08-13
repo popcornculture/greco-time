@@ -121,6 +121,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Set PIN…', 'menuSetPin')
     .addItem('Show phone setup link', 'menuSetupLink')
+    .addItem('Email phone setup link…', 'menuEmailSetupLink')
     .addItem('Send today\'s digest now', 'menuSendDigest')
     .addToUi();
 }
@@ -153,15 +154,85 @@ function menuSetPin() {
   ui.alert('PIN saved. Only its SHA-256 hash is stored.');
 }
 
+/**
+ * The web app's /exec URL.
+ *
+ * ScriptApp.getService().getUrl() sometimes returns the /dev URL, which only works for
+ * someone signed into the owning Google account — on a phone it fails with a bare
+ * "Load failed". Set the EXEC_URL script property to the real /exec URL (copied from the
+ * deployment dialog) and it is used verbatim.
+ */
+function execUrl() {
+  var override = prop('EXEC_URL');
+  if (override) return override.trim();
+  try { return ScriptApp.getService().getUrl() || ''; } catch (err) { return ''; }
+}
+
+function setupLink() {
+  var exec = execUrl();
+  var pwa = prop('PWA_URL');
+  if (!exec) throw new Error('No web app URL. Deploy it (Deploy → New deployment → Web app), then paste the /exec URL into the EXEC_URL script property.');
+  if (!pwa) throw new Error('Set PWA_URL in Script Properties to where the app is hosted.');
+  if (exec.slice(-4) === '/dev') {
+    throw new Error('The script is reporting its /dev URL, which will not work from a phone.\n\n' +
+      'Copy the /exec URL from Deploy → Manage deployments and paste it into the EXEC_URL script property, then try again.');
+  }
+  return pwa + (pwa.slice(-1) === '/' ? '' : '/') + '#setup=' + encodeURIComponent(exec);
+}
+
+/**
+ * Shows the link in a selectable field with a copy button. A plain ui.alert() renders the
+ * text unselectable, which makes a 200-character link impossible to get onto a phone.
+ */
 function menuSetupLink() {
   var ui = SpreadsheetApp.getUi();
-  var exec = ScriptApp.getService().getUrl();
-  var pwa = prop('PWA_URL');
-  if (!exec) { ui.alert('Deploy the Web App first (Deploy → New deployment → Web app).'); return; }
-  if (!pwa) { ui.alert('Set PWA_URL in Script Properties to where the app is hosted, then try again.'); return; }
-  ui.alert('Send this link to the phone, open it in Safari, then Share → Add to Home Screen:\n\n' +
-    pwa + (pwa.slice(-1) === '/' ? '' : '/') + '#setup=' + encodeURIComponent(exec) +
-    '\n\nThe PIN is typed on the phone and is not part of this link.');
+  var link;
+  try { link = setupLink(); } catch (err) { ui.alert(err.message); return; }
+
+  // JSON.stringify escapes quotes/backslashes safely for embedding in the script below.
+  var html = '<style>body{font:13px -apple-system,Arial,sans-serif;margin:16px}' +
+    'input{width:100%;font-size:13px;padding:8px;box-sizing:border-box}' +
+    'button{margin-top:10px;padding:8px 14px;font-size:13px;cursor:pointer}' +
+    'p{color:#555;line-height:1.45}</style>' +
+    '<p>Open this on the phone <b>in Safari</b>, type the PIN, pick the timekeeper, then ' +
+    '<b>Share → Add to Home Screen</b>.</p>' +
+    '<input id="u" readonly>' +
+    '<button onclick="c()">Copy link</button> <span id="ok"></span>' +
+    '<p>The PIN is <b>not</b> in this link, so it is safe to text or email.</p>' +
+    '<script>' +
+    'var L=' + JSON.stringify(link) + ';' +
+    'var i=document.getElementById("u");i.value=L;i.focus();i.select();' +
+    'function c(){i.select();i.setSelectionRange(0,99999);' +
+    'try{document.execCommand("copy");document.getElementById("ok").textContent="copied";}' +
+    'catch(e){document.getElementById("ok").textContent="press Cmd+C";}}' +
+    '</scr' + 'ipt>';
+
+  ui.showModalDialog(HtmlService.createHtmlOutput(html).setWidth(520).setHeight(260),
+                     'Phone setup link');
+}
+
+/** Emails the link, which is usually the easiest way to get it onto a phone. */
+function menuEmailSetupLink() {
+  var ui = SpreadsheetApp.getUi();
+  var link;
+  try { link = setupLink(); } catch (err) { ui.alert(err.message); return; }
+
+  var res = ui.prompt('Email the setup link',
+    'Send it to which address?\n\n(Open it on the phone in Safari, then Share → Add to Home Screen.)',
+    ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  var to = res.getResponseText().trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) { ui.alert('That does not look like an email address.'); return; }
+
+  MailApp.sendEmail({
+    to: to,
+    subject: 'Greco Time — set up your phone',
+    body: 'Open this link on your iPhone in Safari:\n\n' + link +
+      '\n\nType the PIN you were given, choose your name, then tap Share → Add to Home Screen.\n' +
+      '\nThe PIN is not part of this link.',
+  });
+  ui.alert('Sent to ' + to + '.');
 }
 
 function menuSendDigest() {

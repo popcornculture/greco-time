@@ -127,12 +127,27 @@ async function api(action, payload, override) {
   const pin      = (override && override.pin)      || cfg.pin;
   if (!endpoint) throw new Error('Not set up yet.');
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action, pin, deviceId: cfg.deviceId, payload: payload || {} }),
-    redirect: 'follow',
-  });
+  // Safari reports every network-layer failure as a bare "Load failed", which tells the
+  // user nothing. Catch it and say what was being contacted and what to check.
+  let res;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, pin, deviceId: cfg.deviceId, payload: payload || {} }),
+      redirect: 'follow',
+    });
+  } catch (err) {
+    let host = endpoint;
+    try { host = new URL(endpoint).host; } catch (_) { /* not even a valid URL */ }
+    const tail = endpoint.slice(-5);
+    throw new Error(
+      `Could not reach ${host}. ` +
+      (tail === '/exec'
+        ? 'Check the phone has signal or Wi-Fi.'
+        : `The address must end in /exec — this one ends in "${tail}".`) +
+      ` [${err.message || err}]`);
+  }
   if (!res.ok) throw new Error(`Server returned ${res.status}`);
 
   const text = await res.text();
@@ -496,6 +511,13 @@ async function onConnect() {
   const pin = $('setup-pin').value.trim();
   if (!endpoint) return setupError('Paste the server address, or open the setup link you were sent.');
   if (!pin) return setupError('Enter the PIN.');
+
+  // Caught here rather than at the network layer, where it surfaces as "Load failed".
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(endpoint)) {
+    return setupError('That address does not look right. It should be:\n' +
+      'https://script.google.com/macros/s/…/exec\n\n' +
+      'Got: ' + endpoint);
+  }
 
   const btn = $('setup-connect');
   btn.disabled = true;
