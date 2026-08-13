@@ -171,6 +171,7 @@ const state = {
   activeIdx: -1,       // keyboard highlight in the suggestion list
   confirmingBigHours: false,
   flushing: false,
+  rawHash: '',        // kept for diagnostics when a setup link arrives malformed
 };
 
 /* ══════════════════════════════ client list ══════════════════════════════ */
@@ -522,7 +523,8 @@ async function onConnect() {
   if (!/^https:\/\/script\.google\.com\/(?:a\/macros\/[^/]+|macros)\/s\/[^/]+\/exec$/.test(endpoint)) {
     return setupError('That address does not look right. It should end in /exec, like:\n' +
       'https://script.google.com/macros/s/…/exec\n\n' +
-      'Got: ' + endpoint);
+      'Got (' + endpoint.length + ' chars): ' + endpoint +
+      (state.rawHash ? '\n\nRaw link data: ' + state.rawHash.slice(0, 400) : ''));
   }
 
   const btn = $('setup-connect');
@@ -677,9 +679,21 @@ async function boot() {
 
   // A setup link carries the endpoint in the hash, which browsers never send to a
   // server — so the URL can be texted around without exposing it in server logs.
+  //
+  // Decoded repeatedly: mail clients and link-wrappers re-encode URLs, so the hash can
+  // arrive double- or triple-encoded (https%253A%252F%252F...). One pass would leave
+  // percent-escapes in the middle of the address and it would fail validation.
+  state.rawHash = location.hash || '';
   const m = location.hash.match(/setup=([^&]+)/);
   if (m) {
-    try { $('setup-endpoint').value = decodeURIComponent(m[1]); } catch (_) {}
+    let v = m[1];
+    for (let i = 0; i < 4 && /%[0-9A-Fa-f]{2}/.test(v); i++) {
+      let next;
+      try { next = decodeURIComponent(v); } catch (_) { break; }
+      if (next === v) break;
+      v = next;
+    }
+    $('setup-endpoint').value = v.trim();
     history.replaceState(null, '', location.pathname + location.search);
   }
 
