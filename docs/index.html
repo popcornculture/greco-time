@@ -35,7 +35,12 @@
     <span class="label">Server address</span>
     <input id="setup-endpoint" type="url" inputmode="url" autocapitalize="off"
            autocorrect="off" spellcheck="false" placeholder="https://script.google.com/…/exec">
-    <span class="hint">Filled in automatically if you opened the setup link.</span>
+    <div class="hint-row">
+      <span class="hint">Filled in automatically if you opened the setup link.</span>
+      <!-- Escape hatch: the endpoint is ~114 characters, which nobody should have to
+           type on a phone if the link route fails for any reason. -->
+      <button type="button" id="setup-paste" class="tiny">Paste</button>
+    </div>
   </label>
 
   <label class="field">
@@ -58,7 +63,7 @@
 
   <!-- Build stamp. Exists so "which version is this phone actually running?" is
        answerable at a glance instead of guessed at. -->
-  <p class="build">build 9 · 2026-08-13</p>
+  <p class="build">build 10 · 2026-08-13</p>
 </section>
 
 <!-- ───────────────────────────── Main entry form ───────────────────────────── -->

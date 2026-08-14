@@ -376,3 +376,17 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
   font-size: 12px;
   color: var(--muted);
 }
+
+/* Paste button beside the server-address hint. */
+.hint-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hint-row .hint { margin-top: 6px; }
+.tiny {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--blue);
+  font: 600 13px var(--font);
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}

@@ -685,6 +685,18 @@ function wireEvents() {
   });
 
   // Setup
+  $('setup-paste').addEventListener('click', async () => {
+    // Reading the clipboard needs a user gesture on iOS and shows a confirmation
+    // prompt; if it is refused, fall back to telling the user to paste by hand.
+    try {
+      const t = (await navigator.clipboard.readText()).trim();
+      if (!t) return setupError('Clipboard is empty.');
+      $('setup-endpoint').value = t;
+      setupError('');
+    } catch (_) {
+      setupError('Could not read the clipboard. Tap and hold the box above, then Paste.');
+    }
+  });
   $('setup-connect').addEventListener('click', onConnect);
   $('setup-save').addEventListener('click', onSetupSave);
 

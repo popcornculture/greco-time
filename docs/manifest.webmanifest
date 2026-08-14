@@ -2,8 +2,6 @@
   "name": "Greco Time",
   "short_name": "Greco Time",
   "description": "Fast time entry for Paul Greco Law, in tenth-of-an-hour increments.",
-  "start_url": ".",
-  "scope": ".",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#f4f6f8",
