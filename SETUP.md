@@ -153,6 +153,23 @@ write the PIN down somewhere; it cannot be read back out.
 
 Then **Deploy** and **copy the Web app URL** — it ends in `/exec`.
 
+**B9a. Paste that URL into an `EXEC_URL` script property. This is required, not optional.**
+
+⚙ Project Settings → Script Properties → `EXEC_URL` → paste → **click "Save script
+properties"** (the row looks filled in before you click; nothing is stored until you do).
+
+`ScriptApp.getService().getUrl()` cannot be trusted: on this project it reported a
+deployment that returns **404**, so every setup link pointed at a dead endpoint. A 404
+carries no CORS header, so Safari reported it as a bare "Load failed" and the real cause
+stayed hidden for an hour. `EXEC_URL` takes priority over that API entirely.
+
+Sanity-check before sending anything to a phone: **Greco Time → Show phone setup link**
+and confirm the deployment id in it matches the URL you just copied. You can read that on
+a laptop; no phone required.
+
+**If you ever redeploy, update `EXEC_URL`** — it now wins over everything else, so a stale
+value sends every phone to a dead endpoint.
+
 > **"Anyone" is required, not a mistake.** The phone app is served from
 > `github.io`, a different origin, and a Google-login-gated deployment cannot be called
 > cross-origin. The PIN is the access control; the endpoint returns nothing without it.
@@ -252,6 +269,10 @@ the safe failure.
 
 | Symptom | Cause |
 |---|---|
+| **"Reached … but the browser refused to read the reply (CORS)"** | The endpoint returns something without CORS headers — usually a **404 from a dead deployment**. Compare the id in the setup link against *Deploy → Manage deployments* and fix `EXEC_URL`. This was the real failure during setup. |
+| **"Could not reach … at all"** | The request never left the phone: content blocker, VPN, or iCloud Private Relay. |
+| **"That address does not look right"** | The endpoint is not a `/exec` URL. Both `…/macros/s/<id>/exec` and the Workspace form `…/a/<domain>/macros/s/<id>/exec` are valid. |
+| Phone shows an old build number | Cached. Delete the home-screen icon, then Settings → Safari → Advanced → Website Data → delete the site. The build stamp on the setup screen tells you what it is actually running. |
 | Setup says "Check the Web App is deployed with access set to Anyone" | B9 was saved with a different access setting. Redeploy. |
 | "Wrong PIN" on every phone | `PIN_HASH` unset, or the PIN was changed after the phones were set up. |
 | An entry shows **refused** | Its timekeeper is not in `TIMEKEEPERS`. Fix the roster; tap the badge to retry. |
