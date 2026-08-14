@@ -580,6 +580,8 @@ async function onSetupSave() {
   cfg.timekeeper = opt.value;
   cfg.isTest = opt.dataset.test === 'true';
   cfg.save();
+  // Setup is stored now, so the address bar no longer needs to carry it.
+  history.replaceState(null, '', location.pathname + location.search);
   await startApp();
 }
 
@@ -710,7 +712,10 @@ async function boot() {
       v = next;
     }
     $('setup-endpoint').value = v.trim();
-    history.replaceState(null, '', location.pathname + location.search);
+    // The hash is deliberately NOT stripped yet. iOS saves whatever URL is showing when
+    // "Add to Home Screen" is tapped, and a home-screen app gets its own storage jar — so
+    // stripping it here would leave the installed icon pointing at a bare URL with no
+    // server address. It is cleared once setup succeeds instead.
   }
 
   // Local development convenience; the file is gitignored and absent in production.
