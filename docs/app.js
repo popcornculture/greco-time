@@ -515,6 +515,26 @@ async function pruneRecent() {
 
 /* ══════════════════════════════ setup screen ══════════════════════════════ */
 
+/**
+ * Pulls the endpoint out of whatever was pasted. People paste the setup *link*
+ * (…/greco-time/#setup=https%3A%2F%2F…%2Fexec) at least as often as the bare endpoint,
+ * and rejecting that is needless friction. Decoded repeatedly because mail clients
+ * re-encode URLs.
+ */
+function extractEndpoint(text) {
+  let t = String(text == null ? '' : text).trim();
+  const m = t.match(/setup=([^&\s]+)/);
+  if (m) t = m[1];
+  for (let i = 0; i < 4 && /%[0-9A-Fa-f]{2}/.test(t); i++) {
+    let next;
+    try { next = decodeURIComponent(t); } catch (_) { break; }
+    if (next === t) break;
+    t = next;
+  }
+  return t.trim();
+}
+
+
 function setupError(msg) {
   const el = $('setup-error');
   if (!msg) { el.hidden = true; return; }
@@ -524,7 +544,9 @@ function setupError(msg) {
 
 async function onConnect() {
   setupError('');
-  const endpoint = $('setup-endpoint').value.trim();
+  // Normalised first, so pasting the whole setup link by hand works as well.
+  const endpoint = extractEndpoint($('setup-endpoint').value);
+  $('setup-endpoint').value = endpoint;
   const pin = $('setup-pin').value.trim();
   if (!endpoint) return setupError('Paste the server address, or open the setup link you were sent.');
   if (!pin) return setupError('Enter the PIN.');
@@ -689,9 +711,9 @@ function wireEvents() {
     // Reading the clipboard needs a user gesture on iOS and shows a confirmation
     // prompt; if it is refused, fall back to telling the user to paste by hand.
     try {
-      const t = (await navigator.clipboard.readText()).trim();
-      if (!t) return setupError('Clipboard is empty.');
-      $('setup-endpoint').value = t;
+      const raw = await navigator.clipboard.readText();
+      if (!raw || !raw.trim()) return setupError('Clipboard is empty.');
+      $('setup-endpoint').value = extractEndpoint(raw);
       setupError('');
     } catch (_) {
       setupError('Could not read the clipboard. Tap and hold the box above, then Paste.');

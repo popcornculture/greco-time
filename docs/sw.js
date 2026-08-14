@@ -6,7 +6,7 @@
  *
  * Bump CACHE whenever the shell changes; the old cache is dropped on activate. */
 
-const CACHE = 'greco-time-v10';
+const CACHE = 'greco-time-v11';
 
 const SHELL = [
   '.',
