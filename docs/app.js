@@ -580,8 +580,12 @@ async function onSetupSave() {
   cfg.timekeeper = opt.value;
   cfg.isTest = opt.dataset.test === 'true';
   cfg.save();
-  // Setup is stored now, so the address bar no longer needs to carry it.
-  history.replaceState(null, '', location.pathname + location.search);
+  // The setup hash is deliberately left in the URL for good. iOS saves whatever address
+  // is showing when "Add to Home Screen" is tapped, and gives the installed app its own
+  // storage — so clearing it would mean an icon added *after* setup opens to an empty
+  // form with no server address, and a 114-character endpoint to retype on a phone.
+  // Keeping it makes the install work whenever it happens. The hash is never sent to any
+  // server, and it carries no PIN.
   await startApp();
 }
 
@@ -730,6 +734,14 @@ async function boot() {
         if (dev.pin) $('setup-pin').value = dev.pin;
       }
     } catch (_) { /* expected in production */ }
+  }
+
+  // Already configured, but the address carries no setup hash — either an older build
+  // stripped it, or the plain URL was opened. Put it back, so that adding to the home
+  // screen at any later moment captures the server address with it.
+  if (cfg.endpoint && !/setup=/.test(location.hash)) {
+    history.replaceState(null, '', location.pathname + location.search +
+      '#setup=' + encodeURIComponent(cfg.endpoint));
   }
 
   wireEvents();
