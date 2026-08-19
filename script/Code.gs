@@ -32,6 +32,7 @@ function doPost(e) {
       case 'verify':  return json({ ok: true, timekeepers: timekeepers() });
       case 'clients': return json({ ok: true, clients: readClients() });
       case 'entries': return json(saveEntries(body.payload || {}, deviceId));
+      case 'calendar': return json(calendarSuggestions(body.payload || {}));
       default:        return json({ ok: false, error: 'Unknown action.' });
     }
   } catch (err) {
@@ -94,7 +95,7 @@ function checkPin(pin, deviceId) {
 /* ══════════════════════════════ writes ══════════════════════════════ */
 
 /**
- * Appends a batch of entries.
+ * Appends a batch of entries — hourly time, flat expenses, or a mixture of both.
  *
  * Idempotent by UUID: an entry whose UUID is already in the sheet is reported as
  * accepted but written once. This is what makes it safe for the phone to retry a
@@ -123,9 +124,14 @@ function saveEntries(payload, deviceId) {
     var lock = LockService.getScriptLock();
     lock.waitLock(30000);
     try {
-      var written = appendEntries(valid);
-      accepted = written.accepted;
-      written.rejected.forEach(function (r) { rejected.push(r); });
+      // One tab per kind, so a mixed flush is two appends rather than one.
+      ['time', 'expense'].forEach(function (kind) {
+        var forKind = valid.filter(function (v) { return entryKind(v) === kind; });
+        if (!forKind.length) return;
+        var written = appendEntries(exportSpec(kind), forKind);
+        written.accepted.forEach(function (u) { accepted.push(u); });
+        written.rejected.forEach(function (r) { rejected.push(r); });
+      });
       touchDevice(deviceId, valid[0].timekeeper, valid[0].isTest);
     } finally {
       lock.releaseLock();
@@ -146,6 +152,12 @@ function saveEntries(payload, deviceId) {
   return { ok: true, accepted: accepted, rejected: rejected };
 }
 
+/** An entry with no `kind` is hourly time — that is every entry written before expenses
+ *  existed, and every entry from a phone still running an older build. */
+function entryKind(entry) {
+  return (entry && String(entry.kind || '')) === 'expense' ? 'expense' : 'time';
+}
+
 function validateEntry(entry, roster) {
   if (!entry || !entry.uuid) return 'Missing id.';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(entry.date || ''))) return 'Bad date.';
@@ -155,15 +167,47 @@ function validateEntry(entry, roster) {
     // and silently reassigning the entry to someone else would be worse.
     return 'Unknown timekeeper "' + entry.timekeeper + '".';
   }
+
+  if (entryKind(entry) === 'expense') {
+    var a = Number(entry.amount);
+    if (!isFinite(a) || a <= 0) return 'Bad amount.';
+    if (a > MAX_AMOUNT_PER_EXPENSE) return 'Amount above ' + MAX_AMOUNT_PER_EXPENSE + '.';
+    // The note is the line item the client reads on the bill. An expense that just says
+    // "$450" is unbillable in practice, so unlike time this one is required.
+    if (!String(entry.description || '').trim()) return 'An expense needs a description.';
+    return null;
+  }
+
   var h = Number(entry.hours);
   if (!isFinite(h) || h <= 0) return 'Bad hours.';
   if (h > MAX_HOURS_PER_ENTRY) return 'Hours above ' + MAX_HOURS_PER_ENTRY + '.';
   return null;
 }
 
-function appendEntries(entries) {
-  var sheet = tab(TABS.entries, ENTRY_HEADERS);
-  var uuidCol = col('uuid') + 1;
+/** Money is rounded to the cent, never to the tenth. */
+function normaliseEntry(spec, entry) {
+  var out = {
+    uuid: entry.uuid,
+    date: entry.date,
+    client: String(entry.client).trim().replace(/\s+/g, ' '),
+    timekeeper: entry.timekeeper,
+    description: String(entry.description || '').trim(),
+    matterType: entry.matterType || '',
+    isTest: Boolean(entry.isTest),
+    deviceId: entry.deviceId || '',
+  };
+  if (spec.kind === 'expense') {
+    out.amount = Math.round(Number(entry.amount) * 100) / 100;
+    out.nonbillable = Boolean(entry.nonbillable);
+  } else {
+    out.hours = Math.round(Number(entry.hours) * 10) / 10;
+  }
+  return out;
+}
+
+function appendEntries(spec, entries) {
+  var sheet = tab(spec.source, spec.sourceHeaders);
+  var uuidCol = specCol(spec, 'uuid') + 1;
 
   var seen = {};
   var last = sheet.getLastRow();
@@ -179,25 +223,14 @@ function appendEntries(entries) {
     if (seen[entry.uuid]) return;
     seen[entry.uuid] = true;
 
-    var normalised = {
-      uuid: entry.uuid,
-      date: entry.date,
-      client: String(entry.client).trim().replace(/\s+/g, ' '),
-      timekeeper: entry.timekeeper,
-      hours: Math.round(Number(entry.hours) * 10) / 10,
-      description: String(entry.description || '').trim(),
-      matterType: entry.matterType || '',
-      isTest: Boolean(entry.isTest),
-      deviceId: entry.deviceId || '',
-    };
-
-    rows.push(ALL_FIELDS.map(function (f) { return f.value(normalised); }));
+    var normalised = normaliseEntry(spec, entry);
+    rows.push(spec.allFields.map(function (f) { return f.value(normalised); }));
     newClients.push(normalised);
   });
 
   if (rows.length) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, ENTRY_HEADERS.length).setValues(rows);
-    formatEntrySheet(sheet);
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, spec.sourceHeaders.length).setValues(rows);
+    formatEntrySheet(spec, sheet);
     ensureClients(newClients);
   }
 

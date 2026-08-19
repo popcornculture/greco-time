@@ -1,0 +1,48 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Greco Time — width harness</title>
+<style>
+  body { margin: 0; font: 13px -apple-system, Arial, sans-serif; background: #333; color: #eee; }
+  .row { display: flex; gap: 14px; padding: 12px; align-items: flex-start; }
+  .pane { background: #000; border-radius: 8px; padding: 6px; }
+  .pane h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; text-align: center; color: #bbb; }
+  iframe { border: 0; display: block; background: #fff; }
+  .controls { padding: 8px 12px; }
+  button { font: 12px inherit; padding: 5px 9px; margin-right: 6px; cursor: pointer; }
+</style>
+</head><body>
+<div class="controls">
+  <button onclick="each(f => f.contentWindow.location.reload())">Reload both</button>
+  <button onclick="theme('system')">Auto</button>
+  <button onclick="theme('light')">Light</button>
+  <button onclick="theme('dark')">Dark</button>
+  <button onclick="wipe()">Wipe storage + reload</button>
+</div>
+<div class="row">
+  <div class="pane"><h2>390 × 844 (iPhone 14)</h2>
+    <iframe id="a" src="/" width="390" height="844"></iframe></div>
+  <div class="pane"><h2>320 × 568 (iPhone SE 1)</h2>
+    <iframe id="b" src="/" width="320" height="568"></iframe></div>
+</div>
+<script>
+  function each(fn) { [document.getElementById('a'), document.getElementById('b')].forEach(fn); }
+  // Set the stored choice the way the app does, then reload so the inline head script
+  // applies it exactly as it would on a cold launch.
+  function theme(t) {
+    each(f => { try { f.contentWindow.localStorage.setItem('gt.theme', t); } catch (e) {} });
+    each(f => f.contentWindow.location.reload());
+  }
+  function wipe() {
+    each(f => {
+      try {
+        f.contentWindow.localStorage.clear();
+        f.contentWindow.indexedDB.deleteDatabase('greco-time');
+      } catch (e) {}
+    });
+    setTimeout(() => each(f => f.contentWindow.location.reload()), 300);
+  }
+  // scrollTo silently no-ops in a backgrounded tab unless this is set per frame.
+  each(f => f.addEventListener('load', () => {
+    try { f.contentWindow.document.documentElement.style.scrollBehavior = 'auto'; } catch (e) {}
+  }));
+</script>
+</body></html>

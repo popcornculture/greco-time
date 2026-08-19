@@ -139,12 +139,12 @@ eq(displays(searchClients(clients(), 'CLAUDE')), ['Claude Artificial'], 'matchin
  * MyCase names frequently carry the filing title. Inverting those produces nonsense. */
 group('filing titles');
 
-var petition = 'Teasley, Anthony PETITION FOR APPOINTMENT OF PROBATE CONSERVATOR';
+var petition = 'Ashford, Daniel PETITION FOR APPOINTMENT OF PROBATE CONSERVATOR';
 eq(parseName(petition).isEntity, true, 'an ALL-CAPS run marks a filing title');
 eq(parseName(petition).surnameFirst, petition, 'filing-title names are shown verbatim');
 eq(parseName(petition).givenFirst, petition, 'and are never re-ordered');
-eq(displays(searchClients([{ name: petition }], 'teas')), [petition], 'still findable by surname');
-eq(displays(searchClients([{ name: petition }], 'anthony')), [petition], 'and by given name');
+eq(displays(searchClients([{ name: petition }], 'ashf')), [petition], 'still findable by surname');
+eq(displays(searchClients([{ name: petition }], 'daniel')), [petition], 'and by given name');
 
 /* The inversion guard on its own: only simple person names flip. */
 eq(parseName('Ramirez, Maria').invertible, true, 'one surname + one given name flips');
@@ -243,6 +243,115 @@ group('todayLocal  (local calendar date, never UTC)');
 eq(todayLocal(new Date(2026, 7, 13, 17, 30, 0)), '2026-08-13', 'evening local time stays on the same day');
 eq(todayLocal(new Date(2026, 0, 5, 0, 5, 0)), '2026-01-05', 'pads month and day');
 eq(todayLocal(new Date(2026, 11, 31, 23, 59, 0)), '2026-12-31', 'new year eve stays in the old year');
+
+/* ─────────────────────────────── parseAmountInput ─────────────────────────────── */
+group('parseAmountInput  (money keeps its cents, unlike hours)');
+
+eq(parseAmountInput('435'), 435, 'whole dollars');
+eq(parseAmountInput('12.35'), 12.35, 'cents survive');
+eq(parseAmountInput('$450'), 450, 'a typed dollar sign is tolerated');
+eq(parseAmountInput('1,234.56'), 1234.56, 'thousands separators are tolerated');
+eq(parseAmountInput('  99.99 '), 99.99, 'whitespace trimmed');
+eq(parseAmountInput('0.05'), 0.05, 'five cents is a real amount');
+
+/* The whole reason this is not parseHoursInput: snapping to a tenth would turn a $12.35
+ * filing fee into $12.40 and the ledger would never balance against the receipt. */
+eq(parseAmountInput('12.35') !== 12.4, true, 'does NOT snap to the nearest tenth');
+eq(parseAmountInput('1.234'), 1.23, 'rounds to the cent, down');
+eq(parseAmountInput('1.235'), 1.24, 'rounds to the cent, up');
+
+eq(parseAmountInput('0'), null, 'zero is refused');
+eq(parseAmountInput('-5'), null, 'negative is refused');
+eq(parseAmountInput('abc'), null, 'text is refused');
+eq(parseAmountInput(''), null, 'empty is refused');
+eq(parseAmountInput('12.3.4'), null, 'malformed decimal is refused');
+eq(parseAmountInput('1e3'), null, 'exponent notation is refused');
+
+eq(fmtUsd(435), '$435.00', 'formats with cents');
+eq(fmtUsd(12.5), '$12.50', 'pads a single decimal');
+
+/* ─────────────────────────── matchClientInText ─────────────────────────── */
+group('matchClientInText  (calendar titles → a case, or nothing)');
+
+var cal = clients();
+
+/* A whole name in the title is the reliable case. */
+eq(matchClientInText(cal, 'Hearing re Maria Ramirez').name, 'Maria Ramirez', 'full name in a title');
+eq(matchClientInText(cal, 'Call w/ Ramirez, Maria').name, 'Maria Ramirez', 'surname-first form');
+eq(matchClientInText(cal, 'MENDEZ prep').name, 'Arturo Mendez', 'a surname alone, unambiguously');
+eq(matchClientInText(cal, 'meeting: clayton ruiz at 3').name, 'Clayton Ruiz', 'lowercased title');
+
+/* Nothing rather than a guess. Filing time against the wrong client's case is worse
+ * than filing none, because it bills a stranger and hides the real entry. */
+eq(matchClientInText(cal, 'Team meeting'), null, 'no name, no match');
+eq(matchClientInText(cal, 'Call re hearing prep'), null, 'only stopwords, no match');
+eq(matchClientInText(cal, ''), null, 'empty title');
+eq(matchClientInText(cal, 'Lunch'), null, 'unrelated word');
+
+/* Two clients share a surname → the title does not say which, so neither is used. */
+var twins = [{ name: 'Maria Ramirez' }, { name: 'Jose Ramirez' }];
+eq(matchClientInText(twins, 'Hearing — Ramirez'), null, 'an ambiguous surname matches nothing');
+eq(matchClientInText(twins, 'Hearing — Jose Ramirez').name, 'Jose Ramirez',
+   'a full name resolves the ambiguity');
+
+/* Longest match wins, so a client whose name contains another does not shadow it. */
+var nested = [{ name: 'Rich Co' }, { name: 'Aaron Richards' }];
+eq(matchClientInText(nested, 'call with Aaron Richards').name, 'Aaron Richards',
+   'longest whole-name match wins');
+
+/* Substring safety: a surname must sit on a word boundary. */
+eq(matchClientInText([{ name: 'Abel Maya' }], 'maybe reschedule'), null,
+   '"maya" does not match inside "maybe"');
+
+/* Case names with a filing title baked in — 93 of the firm's 260. The calendar entry for
+ * one of these says "Ashford", never the whole 60-character caption, and parseName treats
+ * the caption as one indivisible surname, so a token tier is the only thing that finds it. */
+var LONG = 'Ashford, Daniel PETITION FOR APPOINTMENT OF PROBATE CONSERVATOR';
+var withLong = cal.concat([{ name: LONG, matterType: 'Conservatorship' }]);
+eq(matchClientInText(withLong, 'Ashford conservatorship review').name, LONG,
+   'a surname inside a filing-title case name is found');
+eq(matchClientInText(withLong, 'call re Daniel').name, LONG, 'the given name works too');
+
+/* But the filing title itself must never match, or every conservatorship on the list
+ * would answer to "probate hearing". */
+eq(matchClientInText(withLong, 'probate hearing'), null, 'ALL-CAPS filing words are not searchable');
+eq(matchClientInText(withLong, 'PETITION prep'), null, 'nor is "petition"');
+eq(matchClientInText(withLong, 'appointment at 3'), null, 'nor "appointment"');
+
+/* Two long captions sharing a name stay ambiguous. */
+eq(matchClientInText([{ name: 'Ashford, Daniel PETITION FOR CONSERVATOR' },
+                      { name: 'Ashford, Marie PETITION FOR GUARDIAN' }], 'Ashford hearing'), null,
+   'a token shared by two case names matches neither');
+
+/* Entity markers are not identifying: "LLC" or "Trust" appears across many clients. */
+eq(matchClientInText([{ name: 'Artesia Holdings LLC' }, { name: 'Bayside LLC' }], 'llc meeting'),
+   null, '"llc" alone matches nothing');
+eq(matchClientInText(cal, 'Artesia paperwork').name, 'Artesia Holdings LLC',
+   'the distinctive part of an entity name still matches');
+
+/* Short tokens are excluded from the inner tier — "Van" in "Nguyen Van Minh" must not
+ * match a title about a van. */
+eq(matchClientInText(cal, 'pick up the van'), null, 'a three-letter inner token is ignored');
+
+/* ─────────────────────────── suggestFromEvent ─────────────────────────── */
+group('suggestFromEvent');
+
+var ev = { id: 'e1', title: 'Hearing re Maria Ramirez', hours: 1.3, location: '' };
+var s = suggestFromEvent(cal, ev);
+eq(s.client.name, 'Maria Ramirez', 'matched client comes back canonical');
+eq(s.hours, 1.3, 'duration is carried through');
+eq(s.description, 'Hearing re Maria Ramirez', 'the title becomes the description verbatim');
+eq(s.matterType, 'Criminal', 'the client\'s default matter type comes along');
+
+var blank = suggestFromEvent(cal, { id: 'e2', title: 'Team standup', hours: 0.5 });
+eq(blank.client, null, 'no match leaves the client empty rather than guessing');
+eq(blank.hours, 0.5, 'hours still suggested without a client');
+eq(blank.description, 'Team standup', 'description still suggested');
+
+/* The location is searched too — "Dept 5" hearings often name the case only there. */
+eq(suggestFromEvent(cal, { id: 'e3', title: 'Hearing', hours: 1,
+   location: 'Dept 5 — Clara Benson' }).client.name, 'Clara Benson',
+   'a case named only in the location is found');
 
 /* ─────────────────────────────── summary ─────────────────────────────── */
 

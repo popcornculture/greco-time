@@ -2,7 +2,26 @@
    No webfonts on purpose: any font request would fail on a cold offline launch and
    leave the app rendering in a fallback anyway. System stack is also instant. */
 
+/* ─────────────────────────────── theming ───────────────────────────────
+ *
+ * Three states, and the CSS has to handle all three:
+ *
+ *   no data-theme attribute  → follow the phone (prefers-color-scheme)
+ *   data-theme="light"       → force light, even on a dark phone
+ *   data-theme="dark"        → force dark, even on a light phone
+ *
+ * So every colour is a token defined once on bare :root in its light value, and the dark
+ * values are aliased in twice — once inside the media query (guarded against an explicit
+ * light override) and once for the explicit dark attribute. The alias list is duplicated
+ * because CSS cannot combine a media query and a selector in one rule; the palette itself
+ * is not, which is what stops the two drifting apart.
+ *
+ * Rule for anything added later: never give a colour its only definition inside a media
+ * query or a [data-theme] block, or one of the three states will render it wrong.
+ */
+
 :root {
+  /* Light palette — the default. */
   --navy: #00376A;
   --blue: #065B9E;
   --red: #CB0000;
@@ -12,11 +31,129 @@
   --bg: #f4f6f8;
   --card: #ffffff;
   --ok: #0f7b3d;
+  /* Tinted surfaces. Previously hardcoded at each use site, which is exactly why they
+     stayed light in dark mode. */
+  --sunk: #eef4fa;            /* pressed / highlighted rows */
+  --accent: var(--navy);      /* filled buttons and headings */
+  --accent-press: #002b53;
+  --on-accent: #ffffff;
+  --disabled: #9aa5b1;
+  --warn-bg: #fff6e0;
+  --warn-line: #f0c36d;
+  --warn-ink: #7a4d00;
+  --err-bg: #fdecec;
+  --err-line: #f3c2c2;
+  --err-ink: #8E0000;
+  /* The whole image is the token: a var() *inside* a url() string is never
+     substituted, so only swapping the entire background-image works. */
+  --chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' fill='none' stroke='%236b7280' stroke-width='2'/></svg>");
+  --shadow: rgba(0, 0, 0, 0.09);
+  --toast-shadow: rgba(0, 0, 0, 0.22);
+  /* Toasts keep their own pair. Reusing --err-ink as a background inverted the pill in
+     dark mode into pale pink, which reads as a highlight rather than a problem. */
+  --toast-warn-bg: #7a4d00;
+  --toast-warn-fg: #ffffff;
+  --toast-bad-bg: #8E0000;
+  --toast-bad-fg: #ffffff;
+
+  /* Dark palette. Declared here so it exists in one place; nothing uses it until one of
+     the two blocks below aliases the tokens above onto it. */
+  --d-navy: #4d95d6;
+  --d-ink: #eef1f5;
+  --d-muted: #9aa4b2;
+  --d-line: #2b333d;
+  --d-bg: #12161b;
+  --d-card: #1a2027;
+  --d-ok: #4ade80;
+  --d-red: #ff6b6b;
+  --d-sunk: #22303d;
+  --d-accent: #065B9E;
+  --d-accent-press: #0a4a7d;
+  --d-disabled: #3a444f;
+  --d-warn-bg: #3a2e14;
+  --d-warn-line: #6b5424;
+  --d-warn-ink: #ffd88a;
+  --d-err-bg: #3a1c1c;
+  --d-err-line: #6b2b2b;
+  --d-err-ink: #ffb4b4;
+  --d-chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' fill='none' stroke='%239aa4b2' stroke-width='2'/></svg>");
+  --d-shadow: rgba(0, 0, 0, 0.5);
+  --d-toast-warn-bg: #5c3d0a;
+  --d-toast-warn-fg: #ffe9c2;
+  --d-toast-bad-bg: #7f1d1d;
+  --d-toast-bad-fg: #ffe4e4;
 
   --radius: 12px;
   --tap: 48px;          /* minimum comfortable touch target */
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+
+/* Following the phone — unless light has been forced. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --navy: var(--d-navy);
+    --ink: var(--d-ink);
+    --muted: var(--d-muted);
+    --line: var(--d-line);
+    --bg: var(--d-bg);
+    --card: var(--d-card);
+    --ok: var(--d-ok);
+    --red: var(--d-red);
+    --sunk: var(--d-sunk);
+    --accent: var(--d-accent);
+    --accent-press: var(--d-accent-press);
+    --disabled: var(--d-disabled);
+    --warn-bg: var(--d-warn-bg);
+    --warn-line: var(--d-warn-line);
+    --warn-ink: var(--d-warn-ink);
+    --err-bg: var(--d-err-bg);
+    --err-line: var(--d-err-line);
+    --err-ink: var(--d-err-ink);
+    --chevron: var(--d-chevron);
+    --shadow: var(--d-shadow);
+    --toast-shadow: var(--d-shadow);
+    --toast-warn-bg: var(--d-toast-warn-bg);
+    --toast-warn-fg: var(--d-toast-warn-fg);
+    --toast-bad-bg: var(--d-toast-bad-bg);
+    --toast-bad-fg: var(--d-toast-bad-fg);
+  }
+}
+
+/* Dark forced by hand, on a light phone. Same list; see the note above. */
+:root[data-theme="dark"] {
+  --navy: var(--d-navy);
+  --ink: var(--d-ink);
+  --muted: var(--d-muted);
+  --line: var(--d-line);
+  --bg: var(--d-bg);
+  --card: var(--d-card);
+  --ok: var(--d-ok);
+  --red: var(--d-red);
+  --sunk: var(--d-sunk);
+  --accent: var(--d-accent);
+  --accent-press: var(--d-accent-press);
+  --disabled: var(--d-disabled);
+  --warn-bg: var(--d-warn-bg);
+  --warn-line: var(--d-warn-line);
+  --warn-ink: var(--d-warn-ink);
+  --err-bg: var(--d-err-bg);
+  --err-line: var(--d-err-line);
+  --err-ink: var(--d-err-ink);
+  --chevron: var(--d-chevron);
+  --shadow: var(--d-shadow);
+  --toast-shadow: var(--d-shadow);
+  --toast-warn-bg: var(--d-toast-warn-bg);
+  --toast-warn-fg: var(--d-toast-warn-fg);
+  --toast-bad-bg: var(--d-toast-bad-bg);
+  --toast-bad-fg: var(--d-toast-bad-fg);
+}
+
+/* Tells the browser to paint its own furniture — form controls, scrollbars, the keyboard
+   — to match, which a token swap alone cannot do. */
+:root { color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; } }
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
@@ -61,9 +198,9 @@ html, body {
 .small { font-size: 14px; }
 .hint { display: block; font-size: 13px; color: var(--muted); margin-top: 6px; }
 .error {
-  background: #fdecec;
-  border: 1px solid #f3c2c2;
-  color: #8E0000;
+  background: var(--err-bg);
+  border: 1px solid var(--err-line);
+  color: var(--err-ink);
   padding: 10px 12px;
   border-radius: 10px;
   font-size: 15px;
@@ -96,7 +233,7 @@ input:focus, select:focus {
   box-shadow: 0 0 0 3px rgba(6, 91, 158, 0.15);
 }
 select {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' fill='none' stroke='%236b7280' stroke-width='2'/></svg>");
+  background-image: var(--chevron);
   background-repeat: no-repeat;
   background-position: right 14px center;
   padding-right: 36px;
@@ -139,7 +276,7 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
 /* Right-hand column needs no right border; bottom row needs no bottom border. */
 .seg:nth-child(2n) { border-right: 0; }
 .seg:nth-child(n+3) { border-bottom: 0; }
-.seg[aria-checked="true"] { background: var(--navy); color: #fff; }
+.seg[aria-checked="true"] { background: var(--accent); color: var(--on-accent); }
 
 /* Date sits inline with the Matter label, keeping it at the top of the form as
    specified even though the buttons now need the full width below. */
@@ -179,7 +316,7 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.09);
+  box-shadow: 0 6px 18px var(--shadow);
 }
 .suggestions li {
   min-height: var(--tap);
@@ -204,7 +341,7 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
    letting it look complete. */
 #client { text-overflow: ellipsis; }
 .suggestions li:last-child { border-bottom: 0; }
-.suggestions li[aria-selected="true"] { background: #eef4fa; }
+.suggestions li[aria-selected="true"] { background: var(--sunk); }
 
 #client-state.matched { color: var(--ok); }
 #client-state.unmatched { color: var(--red); }
@@ -222,7 +359,7 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
   color: var(--blue);
   cursor: pointer;
 }
-.chip:active { background: #eef4fa; }
+.chip:active { background: var(--sunk); }
 .readout { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* ──────────────────────────────── buttons ──────────────────────────────── */
@@ -233,15 +370,15 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
   min-height: 52px;
   border: 0;
   border-radius: var(--radius);
-  background: var(--navy);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   font: 600 18px var(--font);
   cursor: pointer;
   margin-top: 8px;
 }
 .primary.big { min-height: 58px; font-size: 19px; margin-top: 18px; }
-.primary:disabled { background: #9aa5b1; }
-.primary:active:not(:disabled) { background: #002b53; }
+.primary:disabled { background: var(--disabled); }
+.primary:active:not(:disabled) { background: var(--accent-press); }
 
 .linkish {
   border: 0;
@@ -266,7 +403,7 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
 .test-tag {
   margin-left: 6px;
   background: var(--red);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -277,9 +414,9 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
 /* Deliberately loud. Safari has no Background Sync, so a queued entry is NOT filed
    until the app is reopened with signal — that has to be impossible to miss. */
 .pending {
-  border: 1px solid #f0c36d;
-  background: #fff6e0;
-  color: #7a4d00;
+  border: 1px solid var(--warn-line);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
   font: 600 13px var(--font);
   padding: 8px 11px;
   border-radius: 999px;
@@ -321,7 +458,7 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
 .today-list .t-client { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .today-list .t-hours { font-weight: 600; font-variant-numeric: tabular-nums; }
 .today-list .t-matter { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.today-list .t-queued { font-size: 11px; color: #7a4d00; background: #fff6e0; border-radius: 4px; padding: 1px 5px; }
+.today-list .t-queued { font-size: 11px; color: var(--warn-ink); background: var(--warn-bg); border-radius: 4px; padding: 1px 5px; }
 
 .footer { margin-top: 18px; text-align: center; }
 
@@ -337,36 +474,23 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
   left: 50%;
   transform: translateX(-50%);
   bottom: calc(env(safe-area-inset-bottom) + 22px);
-  background: var(--navy);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
   padding: 12px 18px;
   border-radius: 999px;
   font-size: 15px;
   font-weight: 600;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 8px 24px var(--toast-shadow);
   z-index: 50;
   max-width: calc(100vw - 32px);
   text-align: center;
 }
-.toast.warn { background: #7a4d00; }
-.toast.bad { background: #8E0000; }
+.toast.warn { background: var(--toast-warn-bg); color: var(--toast-warn-fg); }
+.toast.bad { background: var(--toast-bad-bg); color: var(--toast-bad-fg); }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink: #eef1f5;
-    --muted: #9aa4b2;
-    --line: #2b333d;
-    --bg: #12161b;
-    --card: #1a2027;
-    --navy: #4d95d6;
-  }
-  .seg[aria-checked="true"] { background: var(--blue); }
-  .primary { background: var(--blue); }
-  .suggestions li[aria-selected="true"] { background: #22303d; }
-  .error { background: #3a1c1c; border-color: #6b2b2b; color: #ffb4b4; }
-  .pending { background: #3a2e14; border-color: #6b5424; color: #ffd88a; }
-  .today-list .t-queued { background: #3a2e14; color: #ffd88a; }
-}
+/* The old per-component dark overrides that used to live here are gone: every one of
+   those colours is now a token, so light and dark stay in step by construction and the
+   forced-light-on-a-dark-phone case works too. */
 
 /* Build stamp on the setup screen — makes "is this phone on the current version?"
    a question you can answer by looking, rather than by guessing about caches. */
@@ -390,3 +514,146 @@ input[type="date"] { min-height: var(--tap); line-height: 1.2; }
   border-radius: 8px;
   cursor: pointer;
 }
+
+/* ─────────────────────── time vs expense ─────────────────────── */
+
+/* Two options in one row, so neither the right-hand nor the bottom border of the 2x2
+   matter grid applies. Slightly taller than the matter buttons: this is the control that
+   decides whether a number means hours or dollars, so it reads as the more important one. */
+.kinds .seg { border-bottom: 0; min-height: 52px; font-size: 16px; }
+.kinds .seg:last-child { border-right: 0; }
+
+/* The $ sits inside the field rather than beside it, so the big centred figure lines up
+   with the hours box it replaces. */
+.money { position: relative; }
+.money-sign {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--muted);
+  pointer-events: none;
+}
+.money input { padding-left: 38px; padding-right: 38px; }
+
+.nonbill { margin-top: 10px; font-size: 14px; }
+
+/* ─────────────────────── calendar suggestions ─────────────────────── */
+
+.cal {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 12px 6px;
+  margin-bottom: 18px;
+}
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.cal-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cal-list { list-style: none; margin: 0; padding: 0; }
+.cal-list li {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+}
+.cal-list li:first-child { border-top: 0; }
+
+/* The whole row is the button — a small "use" target beside a long title is a miss
+   waiting to happen on a phone held in one hand. */
+.cal-use {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--tap);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "when what" "when who";
+  align-items: baseline;
+  column-gap: 10px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  padding: 10px 2px;
+  cursor: pointer;
+}
+.cal-use:active { background: var(--sunk); }
+.cal-when {
+  grid-area: when;
+  align-self: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Event titles are as long as case names are. One line, clipped. */
+.cal-what {
+  grid-area: what;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-who {
+  grid-area: who;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-who.matched { color: var(--ok); }
+
+.cal-skip {
+  flex: 0 0 auto;
+  width: 40px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ─────────────────────── appearance switch ─────────────────────── */
+
+.theme {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.theme-btn {
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  font: 600 13px var(--font);
+  /* Below the 48px minimum on purpose: this is a settings control at the very bottom of
+     the page, not something tapped mid-entry, and a full-size row here would compete
+     with Save. Still 36px, which is comfortably hittable. */
+  min-height: 36px;
+  padding: 0 16px;
+  cursor: pointer;
+}
+.theme-btn:last-child { border-right: 0; }
+.theme-btn[aria-checked="true"] { background: var(--accent); color: var(--on-accent); }
+
+.today-list .t-money { color: var(--ok); }

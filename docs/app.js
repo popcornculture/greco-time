@@ -19,8 +19,63 @@
 
 /* ══════════════════════════════ constants ══════════════════════════════ */
 
+/* Single source of truth for the build stamp, printed on the setup screen and in the app
+ * footer. Bump it with CACHE in sw.js whenever the shell changes. */
+const BUILD = 'build 12 · 2026-08-19';
+
 const CFG_KEY = 'gt.config';
+const THEME_KEY = 'gt.theme';     // separate key, so "Reset this device" leaves it alone
 const CONFIRM_HOURS_OVER = 8;     // a second tap is required above this
+const CONFIRM_AMOUNT_OVER = 1000; // the same guard, in dollars
+
+/* ══════════════════════════════ theme ══════════════════════════════
+ * Three states, not two. "Auto" follows the phone, which is what almost everyone wants;
+ * the explicit choices exist because the phone-wide setting is the wrong thing to change
+ * just to read a screen in a dark courtroom or in direct sun.
+ *
+ * The initial attribute is set by an inline script in index.html — doing it here instead
+ * would flash a white screen on every launch of a dark-forced phone. */
+
+const THEME_STATUS_COLOR = { light: '#00376A', dark: '#12161b' };
+
+const theme = {
+  choice: 'system',
+
+  load() {
+    try {
+      const t = localStorage.getItem(THEME_KEY);
+      if (t === 'light' || t === 'dark' || t === 'system') this.choice = t;
+    } catch (_) { /* private browsing; stay on system */ }
+    this.apply();
+  },
+
+  set(choice) {
+    this.choice = choice;
+    try { localStorage.setItem(THEME_KEY, choice); } catch (_) { /* nothing to do */ }
+    this.apply();
+  },
+
+  /** What is actually on screen right now, resolving "system" against the phone. */
+  get effective() {
+    if (this.choice !== 'system') return this.choice;
+    return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  },
+
+  apply() {
+    const root = document.documentElement;
+    // Absent attribute = follow the media query. Present = override it, both directions.
+    if (this.choice === 'system') root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', this.choice);
+
+    // The iOS status bar is painted from this, so a stale value leaves a navy bar sitting
+    // above a dark page.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', THEME_STATUS_COLOR[this.effective]);
+
+    document.querySelectorAll('[data-theme-choice]').forEach((b) =>
+      b.setAttribute('aria-checked', String(b.dataset.themeChoice === this.choice)));
+  },
+};
 
 /* ══════════════════════════════ tiny helpers ══════════════════════════════ */
 
@@ -182,12 +237,17 @@ async function api(action, payload, override) {
 
 const state = {
   clients: [],
+  kind: 'time',        // 'time' or 'expense' — which sort of bill is being written
   matter: '',
   picked: null,        // canonical client object, once resolved
   activeIdx: -1,       // keyboard highlight in the suggestion list
-  confirmingBigHours: false,
+  confirmingBig: false,
   flushing: false,
-  rawHash: '',        // kept for diagnostics when a setup link arrives malformed
+  rawHash: '',         // kept for diagnostics when a setup link arrives malformed
+  calEvents: [],       // the day's calendar suggestions, as returned by the server
+  calDate: '',         // which date those belong to
+  calNote: '',         // a configuration message from the server, e.g. calendar not shared
+  calHidden: false,    // collapsed by hand for this session
 };
 
 /* ══════════════════════════════ client list ══════════════════════════════ */
@@ -297,7 +357,9 @@ function showClientState() {
 
 function setMatter(value) {
   state.matter = value;
-  document.querySelectorAll('.seg').forEach((b) =>
+  // Scoped to [data-matter]: the Time/Expense buttons share the .seg look, and a bare
+  // ".seg" here silently unchecked them every time a matter type was picked.
+  document.querySelectorAll('.seg[data-matter]').forEach((b) =>
     b.setAttribute('aria-checked', b.dataset.matter === value ? 'true' : 'false'));
 }
 
@@ -310,16 +372,57 @@ function updateTimeReadout() {
   el.textContent = `${fmtHours(h)} hrs · ${mins} min · ${units}×6min`;
 }
 
+function updateAmountReadout() {
+  const el = $('amount-readout');
+  const a = parseAmountInput($('amount').value);
+  el.textContent = a === null ? '—' : fmtUsd(a);
+}
+
+/** The label on the save button, which doubles as the "which kind is this?" reminder. */
+function saveLabel() {
+  return state.kind === 'expense' ? 'Save expense' : 'Save entry';
+}
+
+/**
+ * Switches between billing time and billing an expense.
+ *
+ * The unused field is cleared, not just hidden — carrying a stale 1.5 in the hours box
+ * into an expense save is exactly the confusion this whole control exists to prevent.
+ */
+function setKind(kind) {
+  state.kind = kind === 'expense' ? 'expense' : 'time';
+  const isExpense = state.kind === 'expense';
+
+  document.querySelectorAll('.kind').forEach((b) =>
+    b.setAttribute('aria-checked', b.dataset.kind === state.kind ? 'true' : 'false'));
+
+  $('time-field').hidden = isExpense;
+  $('amount-field').hidden = !isExpense;
+
+  if (isExpense) { $('hours').value = ''; updateTimeReadout(); }
+  else { $('amount').value = ''; $('nonbillable').checked = false; updateAmountReadout(); }
+
+  // Optional on time, required on an expense — say which, rather than only refusing later.
+  $('desc-optional').textContent = isExpense ? '— what it was for' : '— optional';
+  $('description').placeholder = isExpense ? 'Filing fee, transcript, service…' : 'Phone call w/ DA…';
+
+  state.confirmingBig = false;
+  $('save').textContent = saveLabel();
+  formError('');
+}
+
 function resetForm() {
   $('entry-form').reset();
   $('date').value = todayLocal();
   setMatter('');
   state.picked = null;
-  state.confirmingBigHours = false;
-  $('save').textContent = 'Save entry';
+  state.confirmingBig = false;
+  // Always back to Time. A sticky expense mode is how an hour of work becomes $1.00.
+  setKind('time');
   $('suggestions').hidden = true;
   $('form-error').hidden = true;
   updateTimeReadout();
+  updateAmountReadout();
   showClientState();
 }
 
@@ -357,31 +460,53 @@ async function onSubmit(e) {
     clientName = state.picked.name;   // canonical spelling, always
   }
 
-  const hours = parseHoursInput($('hours').value);
-  if (hours === null) return formError('Enter time as hours, e.g. 1.5 for 90 minutes.');
+  const isExpense = state.kind === 'expense';
+  const description = $('description').value.trim();
+
+  let hours = null, amount = null;
+  if (isExpense) {
+    amount = parseAmountInput($('amount').value);
+    if (amount === null) return formError('Enter the amount in dollars, e.g. 435 or 12.35.');
+    // Refused here as well as on the server, so the phone says so immediately instead of
+    // queueing something that can only ever come back rejected.
+    if (!description) return formError('Say what the expense was for — it goes on the bill.');
+  } else {
+    hours = parseHoursInput($('hours').value);
+    if (hours === null) return formError('Enter time as hours, e.g. 1.5 for 90 minutes.');
+  }
 
   // Two-tap guard instead of a confirm() dialog: 15 typed when 1.5 was meant is the
-  // single most likely data-entry error, and a modal here would be worse UX.
-  if (hours > CONFIRM_HOURS_OVER && !state.confirmingBigHours) {
-    state.confirmingBigHours = true;
-    $('save').textContent = `Tap again to confirm ${fmtHours(hours)} hrs`;
+  // single most likely data-entry error, and a modal here would be worse UX. The same
+  // applies to a missing decimal point on money — 43500 for $435.00.
+  const over = isExpense ? amount > CONFIRM_AMOUNT_OVER : hours > CONFIRM_HOURS_OVER;
+  if (over && !state.confirmingBig) {
+    state.confirmingBig = true;
+    $('save').textContent = isExpense
+      ? `Tap again to confirm ${fmtUsd(amount)}`
+      : `Tap again to confirm ${fmtHours(hours)} hrs`;
     return;
   }
 
   const entry = {
     uuid: uuid(),
+    kind: state.kind,
     date,
     matterType: state.matter,
     client: clientName,
     clientIsNew: isNew,
-    hours,
-    description: $('description').value.trim(),
+    description,
     timekeeper: cfg.timekeeper,
     isTest: Boolean(cfg.isTest),
     deviceId: cfg.deviceId,
     createdAt: new Date().toISOString(),
     attempts: 0,
   };
+  if (isExpense) {
+    entry.amount = amount;
+    entry.nonbillable = $('nonbillable').checked;
+  } else {
+    entry.hours = hours;
+  }
 
   // Durable first, network second. If the tab dies right here the entry survives.
   await store.put('queue', entry);
@@ -395,7 +520,8 @@ async function onSubmit(e) {
 
   resetForm();
   await renderToday();
-  toast(`Saved ${fmtHours(hours)} hrs`);
+  renderCalendar();
+  toast(isExpense ? `Saved ${fmtUsd(amount)}` : `Saved ${fmtHours(hours)} hrs`);
   flush();
 }
 
@@ -486,23 +612,38 @@ async function renderToday() {
     matter.className = 't-matter';
     matter.textContent = (e.matterType || '').slice(0, 4);
 
-    const hours = document.createElement('span');
-    hours.className = 't-hours';
-    hours.textContent = fmtHours(Number(e.hours));
+    const isExpense = e.kind === 'expense';
+
+    const qty = document.createElement('span');
+    qty.className = 't-hours' + (isExpense ? ' t-money' : '');
+    qty.textContent = isExpense ? fmtUsd(Number(e.amount)) : fmtHours(Number(e.hours));
 
     li.append(client, matter);
+    if (isExpense && e.nonbillable) {
+      const nb = document.createElement('span');
+      nb.className = 't-matter';
+      nb.textContent = 'no bill';
+      li.append(nb);
+    }
     if (e.queued) {
       const q = document.createElement('span');
       q.className = 't-queued';
       q.textContent = e.error ? 'refused' : 'queued';
       li.append(q);
     }
-    li.append(hours);
+    li.append(qty);
     ul.append(li);
   }
 
-  const total = rows.reduce((s, e) => s + Number(e.hours || 0), 0);
-  $('today-total').textContent = `${fmtHours(total)} hrs`;
+  // Hours and dollars never sum together, so the total shows whichever kinds are present.
+  const hours = rows.filter((e) => e.kind !== 'expense')
+    .reduce((s, e) => s + Number(e.hours || 0), 0);
+  const money = rows.filter((e) => e.kind === 'expense')
+    .reduce((s, e) => s + Number(e.amount || 0), 0);
+  const parts = [];
+  if (hours || !money) parts.push(`${fmtHours(hours)} hrs`);
+  if (money) parts.push(fmtUsd(money));
+  $('today-total').textContent = parts.join(' · ');
 }
 
 /* Keeps the Today list and the recent store from growing without bound. */
@@ -511,6 +652,169 @@ async function pruneRecent() {
   for (const e of await store.all('recent')) {
     if (String(e.date) < cutoff) await store.del('recent', e.uuid);
   }
+}
+
+/* ══════════════════════════════ calendar suggestions ══════════════════════════════
+ *
+ * The day's appointments are the closest thing to a record of where the time went, and
+ * they are already typed. These are offered as prefills only: tapping one fills the form
+ * and nothing else, so every entry still goes in through the same Save, the same
+ * validation and the same queue. Auto-filing calendar blocks would bill for meetings that
+ * were cancelled, ran short, or belong to nobody's case.
+ *
+ * "Done" ids (used or dismissed) are remembered per date on the device, so a suggestion
+ * acted on does not come back on the next launch. Kept for a week, which is longer than
+ * anyone leaves yesterday's time unlogged.
+ */
+
+const CAL_DONE_KEY = 'cal.done';
+const CAL_DONE_DAYS = 7;
+
+async function calDone() {
+  return (await meta.get(CAL_DONE_KEY)) || {};
+}
+
+async function markCalDone(date, id) {
+  const all = await calDone();
+  const ids = all[date] || [];
+  if (!ids.includes(id)) ids.push(id);
+  all[date] = ids;
+
+  const cutoff = new Date(Date.now() - CAL_DONE_DAYS * 864e5).toISOString().slice(0, 10);
+  for (const d of Object.keys(all)) if (d < cutoff) delete all[d];
+
+  await meta.set(CAL_DONE_KEY, all);
+}
+
+/** Fetches the day's events. Cached per date so reopening the app offline still shows
+ *  them, and so changing the date twice does not mean two round-trips. */
+async function loadCalendar(date, { force = false } = {}) {
+  if (!cfg.ready) return;
+  const cacheKey = `cal.${date}`;
+
+  if (!force) {
+    const cached = await meta.get(cacheKey);
+    if (cached) {
+      state.calDate = date;
+      state.calEvents = cached.events || [];
+      state.calNote = cached.note || '';
+      await renderCalendar();
+    }
+  }
+
+  if (!navigator.onLine) return;
+  try {
+    const data = await api('calendar', { date, timekeeper: cfg.timekeeper });
+    state.calDate = date;
+    state.calEvents = data.events || [];
+    state.calNote = data.note || '';
+    await meta.set(cacheKey, { events: state.calEvents, note: state.calNote });
+    await renderCalendar();
+  } catch (err) {
+    // A calendar that cannot be read must never get in the way of logging time by hand.
+    console.warn('[gt] calendar load failed:', err.message);
+  }
+}
+
+function calendarRow(ev, suggestion) {
+  const li = document.createElement('li');
+
+  const use = document.createElement('button');
+  use.type = 'button';
+  use.className = 'cal-use';
+
+  const when = document.createElement('span');
+  when.className = 'cal-when';
+  when.textContent = `${ev.start} · ${fmtHours(ev.hours)}`;
+
+  const what = document.createElement('span');
+  what.className = 'cal-what';
+  what.textContent = ev.title;
+
+  const who = document.createElement('span');
+  who.className = 'cal-who' + (suggestion.client ? ' matched' : '');
+  // Said plainly either way: a guessed case name that is wrong costs more than no guess,
+  // so it has to be obvious which one you are accepting.
+  who.textContent = suggestion.client ? suggestion.client.name : 'no case matched — pick one';
+
+  use.append(when, what, who);
+  use.addEventListener('click', () => applySuggestion(ev, suggestion));
+
+  const skip = document.createElement('button');
+  skip.type = 'button';
+  skip.className = 'cal-skip';
+  skip.setAttribute('aria-label', `Dismiss ${ev.title}`);
+  skip.textContent = '×';
+  skip.addEventListener('click', async () => {
+    await markCalDone(state.calDate, ev.id);
+    await renderCalendar();
+  });
+
+  li.append(use, skip);
+  return li;
+}
+
+async function renderCalendar() {
+  const panel = $('cal');
+  const ul = $('cal-list');
+  const note = $('cal-note');
+  ul.textContent = '';
+
+  if (state.calHidden || !state.calDate) { panel.hidden = true; return; }
+
+  const done = (await calDone())[state.calDate] || [];
+  const fresh = (state.calEvents || []).filter((e) => !done.includes(e.id));
+
+  // A configuration problem — an unshared calendar — is worth saying once. Anything else
+  // silent: an empty day is not news.
+  if (!fresh.length) {
+    if (state.calNote) {
+      panel.hidden = false;
+      note.hidden = false;
+      note.textContent = state.calNote;
+    } else {
+      panel.hidden = true;
+    }
+    return;
+  }
+
+  note.hidden = true;
+  for (const ev of fresh) ul.append(calendarRow(ev, suggestFromEvent(state.clients, ev)));
+  panel.hidden = false;
+}
+
+/** Fills the form from a suggestion. Never saves — that is the whole point. */
+function applySuggestion(ev, suggestion) {
+  setKind('time');
+  $('date').value = state.calDate;
+
+  if (suggestion.client) {
+    state.picked = suggestion.client;
+    $('client').value = suggestion.client.name;
+    if (suggestion.client.matterType) setMatter(suggestion.client.matterType);
+  } else {
+    state.picked = null;
+    $('client').value = '';
+  }
+
+  $('hours').value = suggestion.hours === null ? '' : fmtHours(suggestion.hours);
+  $('description').value = suggestion.description;
+  state.confirmingBig = false;
+  $('save').textContent = saveLabel();
+
+  updateTimeReadout();
+  showClientState();
+  $('suggestions').hidden = true;
+
+  // Remembered as soon as it is used, so it does not reappear after the save. Dismissing
+  // it here rather than on save is deliberate: if the entry is abandoned the suggestion is
+  // still on the calendar, and the Today list already shows what actually got logged.
+  markCalDone(state.calDate, ev.id).then(renderCalendar);
+
+  // Straight to whichever field still needs a human: the case name if it could not be
+  // matched, otherwise the hours, which is the number most likely to need adjusting.
+  (suggestion.client ? $('hours') : $('client')).focus();
+  toast(suggestion.client ? 'Filled in — check the hours' : 'Filled in — pick the case');
 }
 
 /* ══════════════════════════════ setup screen ══════════════════════════════ */
@@ -535,6 +839,24 @@ function extractEndpoint(text) {
 }
 
 
+/** The real thing: an Apps Script /exec URL, plain or Workspace domain-scoped. */
+function isProductionEndpoint(u) {
+  return /^https:\/\/script\.google\.com\/(?:a\/[^/]+\/)?macros\/s\/[^/]+\/exec$/.test(u);
+}
+
+/**
+ * The local test rig, which the production pattern would otherwise refuse.
+ *
+ * tests/ and the mock backend in the dev rig serve /exec over plain http on localhost or
+ * a LAN address, and going through the real setup screen is the only way to test setup
+ * itself — including on a phone pointed at the dev machine over Wi-Fi. Deliberately
+ * narrow: loopback and the private ranges only, so a mistyped or hostile public address
+ * still gets the "that does not look right" refusal.
+ */
+function isDevEndpoint(u) {
+  return /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)(?::\d+)?\/exec$/.test(u);
+}
+
 function setupError(msg) {
   const el = $('setup-error');
   if (!msg) { el.hidden = true; return; }
@@ -558,7 +880,7 @@ async function onConnect() {
   // live deployment — an earlier guess had the segments the other way round):
   //   https://script.google.com/macros/s/<id>/exec
   //   https://script.google.com/a/<domain>/macros/s/<id>/exec
-  if (!/^https:\/\/script\.google\.com\/(?:a\/[^/]+\/)?macros\/s\/[^/]+\/exec$/.test(endpoint)) {
+  if (!isProductionEndpoint(endpoint) && !isDevEndpoint(endpoint)) {
     return setupError('That address does not look right. It should end in /exec, like:\n' +
       'https://script.google.com/macros/s/…/exec\n\n' +
       'Got (' + endpoint.length + ' chars): ' + endpoint +
@@ -623,7 +945,9 @@ async function startApp() {
   await pruneRecent();
   await renderToday();
   await renderPending();
+  // Clients first: a suggestion cannot name a case until the client list is in hand.
   await loadClients();
+  loadCalendar($('date').value || todayLocal());
   flush();
 }
 
@@ -633,9 +957,32 @@ function showSetup() {
 }
 
 function wireEvents() {
-  // Matter type
-  document.querySelectorAll('.seg').forEach((b) =>
+  // Time vs expense
+  document.querySelectorAll('.kind').forEach((b) =>
+    b.addEventListener('click', () => setKind(b.dataset.kind)));
+
+  // Matter type. Scoped to [data-matter] so the kind buttons, which share the .seg look,
+  // do not also try to set a matter type.
+  document.querySelectorAll('.seg[data-matter]').forEach((b) =>
     b.addEventListener('click', () => setMatter(b.dataset.matter)));
+
+  // Appearance
+  document.querySelectorAll('[data-theme-choice]').forEach((b) =>
+    b.addEventListener('click', () => theme.set(b.dataset.themeChoice)));
+  if (window.matchMedia) {
+    // Keeps the status-bar colour right when the phone flips at sunset while on Auto.
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => theme.apply());
+  }
+
+  // Calendar suggestions
+  $('cal-hide').addEventListener('click', () => {
+    state.calHidden = true;
+    renderCalendar();
+  });
+  $('date').addEventListener('change', () => {
+    const d = $('date').value;
+    if (d && d !== state.calDate) loadCalendar(d);
+  });
 
   // Client autocomplete
   const client = $('client');
@@ -675,17 +1022,24 @@ function wireEvents() {
 
   // Time
   $('hours').addEventListener('input', () => {
-    state.confirmingBigHours = false;
-    $('save').textContent = 'Save entry';
+    state.confirmingBig = false;
+    $('save').textContent = saveLabel();
     updateTimeReadout();
   });
   document.querySelectorAll('.chip').forEach((c) =>
     c.addEventListener('click', () => {
       $('hours').value = c.dataset.hours;
-      state.confirmingBigHours = false;
-      $('save').textContent = 'Save entry';
+      state.confirmingBig = false;
+      $('save').textContent = saveLabel();
       updateTimeReadout();
     }));
+
+  // Amount
+  $('amount').addEventListener('input', () => {
+    state.confirmingBig = false;
+    $('save').textContent = saveLabel();
+    updateAmountReadout();
+  });
 
   $('entry-form').addEventListener('submit', onSubmit);
   $('pending').addEventListener('click', () => { toast('Sending…'); flush(); });
@@ -726,12 +1080,27 @@ function wireEvents() {
   // is resumed rather than reloaded, so 'load' may not fire again for days.
   window.addEventListener('online', flush);
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && cfg.ready) { flush(); loadClients(); renderToday(); }
+    if (document.hidden || !cfg.ready) return;
+    flush();
+    loadClients();
+    renderToday();
+    // Resumed on a new day: the date field is stale and so is the calendar.
+    const today = todayLocal();
+    if (state.calDate && state.calDate !== today && $('date').value === state.calDate) {
+      $('date').value = today;
+    }
+    loadCalendar($('date').value || today, { force: true });
   });
 }
 
 async function boot() {
   cfg.load();
+  theme.load();
+
+  for (const id of ['build-setup', 'build-app']) {
+    const el = $(id);
+    if (el) el.textContent = BUILD;
+  }
 
   // A setup link carries the endpoint in the hash, which browsers never send to a
   // server — so the URL can be texted around without exposing it in server logs.

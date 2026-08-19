@@ -106,6 +106,10 @@ Do not skip this. It carries three things that break in non-obvious ways if wron
   includes `script.container.ui`, which the `Greco Time` menu's dialogs need; miss it and
   **Set PIN…** fails. It deliberately does *not* request `script.external_request`, because
   the script makes no outbound calls and shouldn't ask for permission it doesn't use.
+- **`oauthScopes` includes `calendar.readonly`** — new as of build 12, for the entry
+  suggestions. If you are updating an existing project rather than building a fresh one,
+  adding this scope means Google will prompt for authorization **again** on the next run;
+  that is expected, and until you accept it the calendar panel simply stays hidden.
 - **`runtimeVersion: V8`** — the code assumes the modern runtime.
 
 **B5.** Create the tabs. In the toolbar function dropdown pick **`setupSheet`** → **Run**.
@@ -115,7 +119,9 @@ be automated. **Review permissions → choose the Staff account → Advanced →
 (unsafe) → Allow.** "Unsafe" here only means the script is not Google-verified; it is your
 own code.
 
-Check the Sheet: it should now have `TimeEntries`, `Clients`, `Devices`, `MyCaseExport` tabs.
+Check the Sheet: it should now have `TimeEntries`, `Expenses`, `Clients`, `Devices`,
+`MyCaseExport` and `MyCaseExpenseExport` tabs. Two more, `_ExportBatch` and
+`_ExpenseBatch`, are created hidden — they track which rows went into the last export.
 
 **B6.** Set the configuration. **Project Settings → Script Properties → Add script property**,
 once per row:
@@ -134,7 +140,54 @@ do not tidy them up.
 Leave these unset unless you have a reason: `SHEET_ID` (the bound script finds its own
 Sheet), `SEND_PER_ENTRY` (defaults on, correct for Workspace), `DEFAULT_RATE` (blank makes
 MyCase use the rate already on the case, which is what you want), `RATE_TYPE` (defaults to
-`Hourly`), `DEFAULT_ACTIVITY` (blank).
+`Hourly`), `DEFAULT_ACTIVITY` (blank), `DEFAULT_EXPENSE_TYPE` (blank),
+`MYCASE_EXPENSE_HEADERS` (see B6b), `CALENDAR_IGNORE` (a sensible default list is built in).
+
+### B6a — Calendar suggestions (optional, but this is the ask)
+
+The app can offer the day's appointments as ready-made entries. Two things make it work.
+
+**1. Share the calendar with the account running the script.** Apps Script executes as
+whichever account deployed the web app — `Staff@grecolawgroup.com` during the staff phase —
+so it can only read calendars that account can see. Paul's own calendar has to be shared
+with it:
+
+> In **Paul's** Google Calendar → hover his calendar in the left sidebar → ⋮ →
+> **Settings and sharing** → *Share with specific people or groups* → **Add people** →
+> `Staff@grecolawgroup.com` → permission **"See all event details"** → Send.
+>
+> "See only free/busy" is **not** enough. It returns events with no titles, and the title is
+> the entire point — it is what the case name is matched from and what becomes the
+> description.
+
+**2. Point each timekeeper at their calendar** with one more script property:
+
+| Property | Value |
+|---|---|
+| `CALENDAR_IDS` | `{"Paul Greco":"Paul@grecolawgroup.com"}` |
+
+Anyone not listed falls back to `DEFAULT_CALENDAR_ID`, which defaults to `primary` — the
+executing account's own calendar. So if the whole office works out of one shared calendar,
+set `DEFAULT_CALENDAR_ID` to it and skip `CALENDAR_IDS` entirely.
+
+Nothing breaks if you skip this step: an unreadable calendar makes the phone show a short
+"not shared yet" note and nothing else. Time entry is unaffected.
+
+### B6b — Before the first *expense* import
+
+The time template was verified against MyCase's real file. **The expense one has not been**,
+so do this once before trusting it:
+
+1. In MyCase: **Billing → Expenses → Import Expenses → download the CSV template**.
+2. In the Sheet: **Greco Time → Expenses → MyCase → Prepare export…**. The dialog shows the
+   header row the export will produce.
+3. Compare them.
+   - Only the wording differs → add a script property `MYCASE_EXPENSE_HEADERS`, e.g.
+     `{"amount":"Cost","category":"Expense Category"}`. No code change.
+   - Columns missing, extra, or in a different order → edit `MYCASE_EXPENSE_FIELDS` in
+     `Config.gs`.
+4. Once it matches, set `VERIFIED_EXPENSE_TEMPLATE = true` in `Config.gs` and the warning in
+   the dialog goes away.
 
 **B7.** Set the PIN. Reload the **Sheet** tab — a **Greco Time** menu appears in the menu
 bar. Choose **Greco Time → Set PIN…**, type a PIN of at least 4 characters, OK.
@@ -205,20 +258,40 @@ the digest.
    and a **"2 waiting to send"** badge appears. Turn airplane mode off and reopen the app —
    both rows land, exactly once. Then force-quit the app mid-sync and reopen it, and confirm
    still no duplicates.
-3. **Greco Time → Send today's digest now** to check the digest formatting.
-4. **The MyCase import, which nothing else can prove.** **Greco Time → Rebuild MyCase
-   export** → open the `MyCaseExport` tab → **File → Download → Comma-separated values** →
-   in MyCase, **Billing → Time Entries → Import Time Entries** and upload it.
+3. Log an **expense** too: tap **Expense**, enter an amount, describe what it was for. It
+   should land on the `Expenses` tab, not `TimeEntries`.
+4. **Greco Time → Send today's digest now** to check the digest formatting. With both kinds
+   logged it should show a `TIME` block, an `EXPENSES` block, and a combined total.
 
-> The headers now match MyCase's real template exactly (verified 2026-08-13):
+### 5. The MyCase import, which nothing else can prove
+
+Do this with **one row first**. The menu has a purpose-built item for it:
+
+1. **Greco Time → Time → MyCase → Prepare a 1-row test import…**
+2. The dialog opens, the `MyCaseExport` tab is already selected, and it shows you the exact
+   CSV line MyCase will read. Read the preflight warnings if there are any.
+3. **File → Download → Comma-separated values (.csv)**
+4. In MyCase: **Billing → Time Entries → Import Time Entries**, upload it.
+5. Confirm MyCase reports **1** row imported, and that the entry looks right on the case —
+   right client, right hours, and **billable**.
+6. Back in the Sheet: **Greco Time → Time → MyCase → Mark exported rows as done**.
+
+> The headers match MyCase's real template exactly (verified 2026-08-13):
 > `Case Name,User,Activity,Note,Date,Rate,Rate Type,Hours,Nonbillable`
 >
-> Still do this first with a **single** entry and delete it in MyCase afterwards. Three
-> things only a real import can settle: whether a blank `Rate` is accepted, whether a blank
-> `Activity` is accepted, and whether your **Case Name** values match MyCase's cases.
+> Three things only a real import can settle: whether a blank `Rate` is accepted, whether a
+> blank `Activity` is accepted, and whether your **Case Name** values match MyCase's cases.
 
-5. After a real import, run **Greco Time → Mark exported rows as done** so those rows never
-   go out twice. Skipping this double-bills clients on the next export.
+Then repeat the whole thing for **Expenses → MyCase** — and read **B6b** first, because
+those headers are not confirmed yet.
+
+**If MyCase rejects the file**, or you marked it exported and then discovered the import
+failed: **Undo the last “mark exported”**. Without that the rows stay flagged as exported,
+never appear in another export, and are never billed. Only the most recent batch can be
+undone, and preparing a new export clears it.
+
+**Never run "Mark exported" on a batch MyCase did not accept**, and never import the same
+file twice — that is the one path to double-billing a client.
 
 ---
 
@@ -226,7 +299,10 @@ the digest.
 
 - Log time on the phone. That is the whole job.
 - New client? Tick **new client** and type the name; it joins the list for next time.
-- Push to MyCase: **Rebuild MyCase export** → download CSV → import → **Mark exported**.
+- Push time to MyCase: **Greco Time → Time → MyCase → Prepare export…**, follow the four
+  steps in the dialog. Expenses are the same, under **Expenses → MyCase**.
+- Logging an expense instead of time: tap **Expense** on the phone, enter the dollar
+  amount, and say in the description what it was for — that text goes on the client's bill.
 ### Seeding the case list (do this early)
 
 Column A of the `Clients` tab must hold **MyCase case names, spelled exactly as MyCase
@@ -288,3 +364,8 @@ Script Properties.
 Paul redoes once: **authorize** the script, **redeploy** the web app (deployments belong to
 the account that made them), and re-run **`installDigestTrigger()`** — triggers are
 per-user. If his redeploy produces a new `/exec` URL, resend the setup link to each phone.
+
+Calendar suggestions also need one adjustment at handover: the script will then execute as
+Paul's account, so his own calendar becomes `primary` and the share to
+`Staff@grecolawgroup.com` is no longer what is being read. Either drop `CALENDAR_IDS`
+entirely, or point it at whatever calendar Paul's account should read.

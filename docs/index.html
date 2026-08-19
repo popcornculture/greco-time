@@ -21,6 +21,18 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="app.css">
+
+<!-- Theme applied before the stylesheet paints, inline and synchronous on purpose: read
+     it in app.js instead and a phone forced to dark flashes a full white screen on every
+     launch. Own localStorage key, so "Reset this device" does not undo the choice. -->
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('gt.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch (e) { /* private browsing — fall back to following the phone */ }
+})();
+</script>
 </head>
 <body>
 
@@ -62,8 +74,10 @@
   <button id="setup-save" class="primary" hidden>Start using Greco Time</button>
 
   <!-- Build stamp. Exists so "which version is this phone actually running?" is
-       answerable at a glance instead of guessed at. -->
-  <p class="build">build 11 · 2026-08-13</p>
+       answerable at a glance instead of guessed at. Filled from BUILD in app.js, which is
+       the single source of truth — it also appears in the app footer, and two hardcoded
+       strings would drift. -->
+  <p class="build" id="build-setup"></p>
 </section>
 
 <!-- ───────────────────────────── Main entry form ───────────────────────────── -->
@@ -77,7 +91,32 @@
     <button id="pending" class="pending" hidden aria-live="polite"></button>
   </header>
 
+  <!-- Suggestions built from the day's calendar. Hidden unless there is something to
+       offer, so a day with no appointments costs no screen space. Tapping one fills the
+       form in; nothing is ever filed without a deliberate Save. -->
+  <section id="cal" class="cal" hidden>
+    <div class="cal-head">
+      <h2>From your calendar</h2>
+      <button type="button" id="cal-hide" class="tiny">Hide</button>
+    </div>
+    <ul id="cal-list" class="cal-list"></ul>
+    <p id="cal-note" class="hint" hidden></p>
+  </section>
+
   <form id="entry-form" novalidate>
+
+    <!-- Time or expense. Deliberately a visible two-state control that resets to Time
+         after every save, rather than a checkbox that stays ticked: a sticky "expense"
+         tick is how you end up filing an hour of work as $1.00. -->
+    <div class="field">
+      <span class="label" id="kind-label">What are you billing</span>
+      <div class="segmented kinds" role="radiogroup" aria-labelledby="kind-label">
+        <button type="button" class="seg kind" role="radio" data-kind="time"
+                aria-checked="true">Time</button>
+        <button type="button" class="seg kind" role="radio" data-kind="expense"
+                aria-checked="false">Expense</button>
+      </div>
+    </div>
 
     <!-- Row 1: matter type label + date, then the buttons full-width beneath.
          "Conservatorship" cannot fit in a quarter of a shared row on a 320px phone, so
@@ -118,8 +157,8 @@
       <span id="client-state" class="hint" hidden></span>
     </div>
 
-    <!-- Row 3: time in decimal hours. 0.1 = 6 minutes, so 1.5 = 90 minutes. -->
-    <div class="field">
+    <!-- Row 3a: time in decimal hours. 0.1 = 6 minutes, so 1.5 = 90 minutes. -->
+    <div class="field" id="time-field">
       <div class="label-row">
         <span class="label">Time</span>
         <span id="time-readout" class="readout">—</span>
@@ -135,9 +174,29 @@
       </div>
     </div>
 
-    <!-- Optional narrative. Never blocks a save. -->
+    <!-- Row 3b: the expense amount, shown instead of Time. inputmode="decimal" rather
+         than a number input: iOS gives a number pad either way, and a number input adds
+         spinners and silently discards anything it dislikes. -->
+    <div class="field" id="amount-field" hidden>
+      <div class="label-row">
+        <span class="label">Amount</span>
+        <span id="amount-readout" class="readout">—</span>
+      </div>
+      <div class="money">
+        <span class="money-sign" aria-hidden="true">$</span>
+        <input id="amount" type="text" inputmode="decimal" autocomplete="off"
+               placeholder="0.00" class="hours-input">
+      </div>
+      <label class="newclient nonbill">
+        <input id="nonbillable" type="checkbox">
+        <span>do not bill this to the client</span>
+      </label>
+    </div>
+
+    <!-- Optional for time, required for an expense: the note is the line item the client
+         reads on the bill, and "$450" on its own is unbillable in practice. -->
     <label class="field">
-      <span class="label">Description <span class="muted">— optional</span></span>
+      <span class="label">Description <span class="muted" id="desc-optional">— optional</span></span>
       <input id="description" type="text" autocomplete="off" enterkeyhint="done"
              placeholder="Phone call w/ DA…">
     </label>
@@ -159,7 +218,19 @@
   </section>
 
   <footer class="footer">
+    <!-- System follows the phone's own appearance setting, which is what most people
+         want; the explicit options exist for reading a screen in a dark courtroom or in
+         direct sun, where the phone-wide setting is the wrong one to change. -->
+    <div class="theme" role="radiogroup" aria-label="Appearance">
+      <button type="button" class="theme-btn" data-theme-choice="system" aria-checked="true"  role="radio">Auto</button>
+      <button type="button" class="theme-btn" data-theme-choice="light"  aria-checked="false" role="radio">Light</button>
+      <button type="button" class="theme-btn" data-theme-choice="dark"   aria-checked="false" role="radio">Dark</button>
+    </div>
     <button id="reset-device" class="linkish" type="button">Reset this device</button>
+    <!-- Also here, not just on the setup screen: once a phone is set up the setup screen is
+         never seen again, so "did the update actually land on this phone?" was unanswerable
+         on exactly the devices where it gets asked. -->
+    <p class="build" id="build-app"></p>
   </footer>
 </section>
 
